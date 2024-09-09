@@ -1,0 +1,13 @@
+some-key = value
+nested-key = (
+    one = 1
+    //a comment goes here
+    two = 2 // or here
+)
+
+escaped-characters = (
+    \(
+    \)
+    \=
+    \\
+)
