@@ -1,13 +1,11 @@
-use std::iter::Peekable;
-use std::str::Chars;
-use crate::lexer::eat_and_expect::EatAndExpect;
 use crate::lexer::token::Token;
+use crate::str_extensions::StrExtensions;
 
 pub mod token;
 mod eat_and_expect;
 
 pub struct Lexer<'a> {
-    chars: Peekable<Chars<'a>>,
+    text: &'a str,
     cursor_row: usize,
     cursor_column: usize,
 }
@@ -15,95 +13,17 @@ pub struct Lexer<'a> {
 impl<'a> Lexer<'a> {
     pub fn new(text: &'a str) -> Lexer<'a> {
         Self {
-            chars: text.chars().peekable(),
+            text,
             cursor_row: 1,
-            cursor_column: 0,
+            cursor_column: 1,
         }
     }
-    /*
-
-    fn handle_escapes(&mut self) {
-
-        let next_char = if let Some(next_char) = self.chars.peek() {
-            *next_char
-        } else { return };
-
-        dbg!(&next_char);
-
-        let escaped = match next_char {
-            '(' => '(',
-            ')' => ')',
-            '=' => '=',
-            '\\' => '\\',
-            _ => {return;}
-        };
-
-        dbg!("here");
-        self.text_token_lexeme.push(escaped);
-        dbg!(&self.text_token_lexeme);
-        self.chars.next();
-        self.cursor_column += 1;
+    fn new_line(&mut self) {
+        self.cursor_row += 1;
+        self.cursor_column = 1;
     }
 
-    fn consume_text(&mut self, starting_char: char) -> Option<Token> {
-        self.text_token_lexeme.push(starting_char);
-
-        while let Some(next_char) = self.chars.peek() {
-           let next_char = *next_char;
-            dbg!(next_char);
-            match next_char {
-                '\\' => {
-                    // advance the iterator consuming the \
-                    dbg!("here");
-                    self.chars.next();
-                    self.cursor_column += 1;
-                    self.handle_escapes();
-                    continue;
-                },
-                '(' | ')' | '=' => {
-                    return self.close_text_token()
-                }
-                _ => {}
-            }
-
-            if next_char.is_whitespace() {
-                break;
-            }
-
-            self.cursor_column += 1;
-            self.text_token_lexeme.push(self.chars.next().unwrap());
-        }
-
-        return self.close_text_token()
-    }
-    fn consume_char(&mut self, char: char) -> Option<Token> {
-        if char.is_whitespace() {
-            return None;
-        }
-
-        let token = match char {
-            '(' => Some(self.tokenize(token::Kind::LParen, "(")),
-            ')' => Some(self.tokenize(token::Kind::RParen, ")")),
-            '=' => Some(self.tokenize(token::Kind::Equals, "=")),
-            _ => self.consume_text(char)
-        };
-
-        self.cursor_column += 1;
-        token
-    }
-
-    */
-
-    fn eat_comment(&mut self) {
-        while let Some(char) = self.chars.next() {
-            if char == '\n' {
-                self.new_line();
-                return;
-            }
-        }
-    }
-
-    fn tokenize(&self, kind: token::Kind, lexeme: impl AsRef<str>) -> Token {
+    fn place_token(&self, kind: token::Kind, lexeme: impl AsRef<str>) -> Token {
         Token::new(
             kind,
             lexeme.as_ref().to_string(),
@@ -114,35 +34,97 @@ impl<'a> Lexer<'a> {
 
     fn consume_single_char(&mut self, to_consume: char) -> Option<Token> {
         match to_consume {
-            '(' => Some(self.tokenize(token::Kind::LParen, "(")),
-            ')' => Some(self.tokenize(token::Kind::RParen, ")")),
-            '=' => Some(self.tokenize(token::Kind::Equals, "=")),
+            '(' => Some(self.place_token(token::Kind::LParen, "(")),
+            ')' => Some(self.place_token(token::Kind::RParen, ")")),
+            '=' => Some(self.place_token(token::Kind::Equals, "=")),
             _ => None
         }
     }
 
-    fn is_terminal(char: char) -> bool {
-        match char {
-            '(' | ')' | '=' | '\\' => true,
-            _ => false
-        }
+    fn eat_comment(&mut self) {
+        self.skip();
+        // eat everything that is not a new line.
+        self.take_while(|x| x != '\n');
     }
 
-    fn new_line(&mut self) {
-        self.cursor_row += 1;
-        self.cursor_column = 0;
+    fn skip(&mut self) {
+        self.text.skip(1);
+        self.cursor_column += 1;
     }
 
-    fn deal_with_escapes(maybe_slash: char, maybe_escape: char) -> Option<String> {
-        if maybe_slash != '\\' {
-            return None;
+    fn take_while(&mut self, accept: impl FnMut(char) -> bool) -> &str {
+        self.text.take_while(accept)
+    }
+
+    fn first(&self) -> Option<char> {
+        self.text.first()
+    }
+
+    fn needs_escaping(char: char) -> bool {
+        matches!(char, '(' | ')' | '=' | '#' )
+    }
+    fn token_boundary(char: char) -> bool {
+        char.is_whitespace() || Self::needs_escaping(char)
+    }
+    fn consume_text_token(&mut self) -> Token {
+        let mut text = String::new();
+        let start_of_token = self.cursor_column;
+
+        loop {
+            let segment = self.take_while(|x| !Self::token_boundary(x)).to_string();
+            self.cursor_column += segment.len();
+            text.push_str(&segment);
+
+
+            let last_char_is_backslash = segment.chars().last()
+                .map(|x| x == '\\')
+                .unwrap_or(false);
+
+            let next_char_needs_escaping = self.first()
+                .filter(|x| Self::needs_escaping(*x));
+
+
+            if last_char_is_backslash && next_char_needs_escaping.is_some() {
+                let escaped_char = next_char_needs_escaping.unwrap();
+                self.skip();
+                text.replace_range(text.len()-1..text.len(), escaped_char.to_string().as_str());
+            } else {
+                break;
+            }
+
         }
 
-        if  Self::is_terminal(maybe_escape) {
-            Some(String::from(maybe_escape))
-        } else {
-            Some(String::from('\\'))
+        let token = Token::new(token::Kind::Text, text, self.cursor_row, start_of_token);
+
+        token
+    }
+
+    fn next_token(&mut self) -> Option<Token> {
+        while let Some(c) = self.first() {
+            if c == '\n' {
+                self.skip();
+                self.new_line();
+                continue;
+            }
+
+            if c.is_whitespace() {
+                self.skip();
+                continue;
+            }
+
+            if c == '#' {
+                self.eat_comment();
+                continue;
+            }
+
+            if let Some(token) = self.consume_single_char(c) {
+                self.skip();
+                return Some(token)
+            }
+
+            return Some(self.consume_text_token())
         }
+        None
     }
 }
 
@@ -150,64 +132,20 @@ impl Iterator for Lexer<'_> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(mut char) = self.chars.next() {
-            // if we see two unbroken slashes that means we are in a comment and should ignore all
-            // input until a newline.
-            if char == '/' && self.chars.eat(|x| *x == '/').is_some() {
-                self.eat_comment();
-                // we will start again after the newline.
-                continue;
-            }
-
-            if char == '\n' {
-                self.new_line();
-                continue;
-            }
-
-            self.cursor_column += 1;
-            if char.is_whitespace() {
-                continue;
-            }
-
-            let maybe_single_character_token = self.consume_single_char(char);
-            if maybe_single_character_token.is_some() {
-                return maybe_single_character_token;
-            }
-
-            // not whitespace or a single char token
-            let mut lexeme = String::new();
-            let mut pair = (char, char);
-
-            while let Some(peeked_char) = self.chars.peek() {
-                let peeked_char = *peeked_char;
-                pair = (char, peeked_char);
-
-                println!("{:?}", pair);
-                println!("{:?}", Self::deal_with_escapes(pair.0, pair.1));
-
-
-
-                char = peeked_char;
-                self.next();
-            }
-
-
-            let lexeme_len = lexeme.len();
-            return Some(Token::new(
-                token::Kind::Text,
-                lexeme,
-                self.cursor_row,
-                1 + self.cursor_column - lexeme_len
-            ));
-        }
-
-        return None;
+        self.next_token()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn eat_rocket() {
+        let mut x = "rocket beans";
+        assert_eq!(x.take_while(|x| !Lexer::token_boundary(x)), "rocket");
+        assert_eq!(x, " beans")
+    }
 
     #[test]
     fn lparen() {
@@ -233,14 +171,14 @@ mod tests {
 
     #[test]
     fn lparen_rparen_inline_comment() {
-        let text = "(//comment in line\n)";
+        let text = "(#comment in line\n)";
         let mut lexer = Lexer::new(text);
         assert_eq!(lexer.next(), Some(Token::new(token::Kind::LParen, "(", 1, 1)));
         assert_eq!(lexer.next(), Some(Token::new(token::Kind::RParen, ")", 2, 1)));
     }
     #[test]
     fn lparen_rparen_comment() {
-        let text = "//comment not inline\n()";
+        let text = "#comment not inline\n()";
         let mut lexer = Lexer::new(text);
         assert_eq!(lexer.next(), Some(Token::new(token::Kind::LParen, "(", 2, 1)));
         assert_eq!(lexer.next(), Some(Token::new(token::Kind::RParen, ")", 2, 2)));
@@ -288,13 +226,41 @@ mod tests {
     fn b_escaped_lparen() {
         let text = r"b\(";
         let mut lexer = Lexer::new(text);
-        assert_eq!(lexer.next(), Some(Token::new(token::Kind::Text, "b(", 1, 2)));
+        assert_eq!(lexer.next(), Some(Token::new(token::Kind::Text, "b(", 1, 1)));
     }
 
     #[test]
     fn a_escaped_lparen_b() {
         let text = r"a\(b";
         let mut lexer = Lexer::new(text);
-        assert_eq!(lexer.next(), Some(Token::new(token::Kind::Text, "a(b", 1, 2)));
+        assert_eq!(lexer.next(), Some(Token::new(token::Kind::Text, "a(b", 1, 1)));
+    }
+
+    #[test]
+    fn newline_inside() {
+        let text = "a\nb";
+        let mut tokens = Lexer::new(text);
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, "a", 1, 1));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, "b", 2, 1));
+    }
+
+    #[test]
+    fn long_test_1() {
+        let text = r"symbols = (\( \= \#) letters = (a b c)";
+        let mut tokens = Lexer::new(text);
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, "symbols", 1, 1));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Equals, "=", 1, 9));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::LParen, "(", 1, 11));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, "(", 1, 12));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, "=", 1, 15));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, "#", 1, 18));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::RParen, ")", 1, 20));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, "letters", 1, 22));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Equals, "=", 1, 30));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::LParen, "(", 1, 32));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, "a", 1, 33));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, "b", 1, 35));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, "c", 1, 37));
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::RParen, ")", 1, 38));
     }
 }

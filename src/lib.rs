@@ -1,4 +1,5 @@
 mod lexer;
+mod str_extensions;
 
 pub enum Expression {
     Presence(String),
