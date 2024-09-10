@@ -23,4 +23,17 @@ impl Token {
             column,
         }
     }
+
+    pub fn kind(&self) -> Kind {
+        self.kind
+    }
+    pub fn lexeme(&self) -> &String {
+        &self.lexeme
+    }
+    pub fn row(&self) -> usize {
+        self.row
+    }
+    pub fn column(&self) -> usize {
+        self.column
+    }
 }

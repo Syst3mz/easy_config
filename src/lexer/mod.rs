@@ -2,7 +2,6 @@ use crate::lexer::token::Token;
 use crate::str_extensions::StrExtensions;
 
 pub mod token;
-mod eat_and_expect;
 
 pub struct Lexer<'a> {
     text: &'a str,
@@ -242,6 +241,13 @@ mod tests {
         let mut tokens = Lexer::new(text);
         assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, "a", 1, 1));
         assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, "b", 2, 1));
+    }
+
+    #[test]
+    fn no_escape() {
+        let text = r"a\b";
+        let mut tokens = Lexer::new(text);
+        assert_eq!(tokens.next().unwrap(), Token::new(token::Kind::Text, r"a\b", 1, 1));
     }
 
     #[test]
