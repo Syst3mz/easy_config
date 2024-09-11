@@ -1,0 +1,1 @@
+A language, parser, and lexer designed to make easy to read and write configuration files.
