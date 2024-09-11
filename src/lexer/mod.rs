@@ -1,7 +1,9 @@
+use crate::lexer::str_extensions::StrExtensions;
 use crate::lexer::token::Token;
-use crate::str_extensions::StrExtensions;
+
 
 pub mod token;
+mod str_extensions;
 
 pub struct Lexer<'a> {
     text: &'a str,
