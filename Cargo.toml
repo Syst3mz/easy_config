@@ -6,7 +6,7 @@ license = "AGPL-3"
 description = "A language, parser, and lexer designed to make easy to read and write configuration files."
 homepage = "https://github.com/Syst3mz/easy_config"
 repository = "https://github.com/Syst3mz/easy_config"
-readme = ""
+readme = "README.md"
 categories = ["config"]
 keywords = ["config"]
 
