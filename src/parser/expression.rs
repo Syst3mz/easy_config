@@ -131,8 +131,8 @@ impl Expression {
 
     /// Get the value of a key in an `Expression` if that key exists and has a single `Presence`
     /// value and the string stored in that `Presence` can be converted by `T::FromStr`.
-    pub fn get<T: FromStr>(&self, needle: impl AsRef<str>) -> Option<Result<T, <T as FromStr>::Err>> {
-        let needle = needle.as_ref();
+    pub fn get_from_key<T: FromStr>(&self, key: impl AsRef<str>) -> Option<Result<T, <T as FromStr>::Err>> {
+        let needle = key.as_ref();
         let maybe_pair = self.explore_for(needle)?;
         let Pair(_, value) = maybe_pair else { return None; };
         let value = value.get_presence_value()?;
@@ -215,5 +215,29 @@ mod tests {
     fn not_exists_nesting() {
         let expr = Parser::new("a = 1 b = (1 2 c = 2)").parse().unwrap();
         assert!(!expr.exists("c"))
+    }
+
+    #[test]
+    fn explore() {
+        let expr = Parser::new("a = 1 b = (1 2 c = 2)").parse().unwrap();
+        assert!(expr.explore_for("a").is_some())
+    }
+
+    #[test]
+    fn not_explore() {
+        let expr = Parser::new("a = 1 b = (1 2 c = 2)").parse().unwrap();
+        assert!(expr.explore_for("z").is_none())
+    }
+
+    #[test]
+    fn nested_explore() {
+        let expr = Parser::new("a = 1 b = (1 2 c = 2)").parse().unwrap();
+        assert!(expr.explore_for("c").is_some())
+    }
+
+    #[test]
+    fn get() {
+        let expr = Parser::new("a = 1 b = (1 2 c = 2)").parse().unwrap();
+        assert_eq!(expr.get_from_key::<i32>("a").unwrap().unwrap(), 1)
     }
 }
