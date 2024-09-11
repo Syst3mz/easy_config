@@ -4,7 +4,3 @@ version = "0.1.1"
 edition = "2021"
 
 [dependencies]
-serde = { version = "1.0.210", optional = true }
-
-[features]
-serde = ["dep:serde"]

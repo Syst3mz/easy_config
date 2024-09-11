@@ -67,11 +67,14 @@ impl<'a> Lexer<'a> {
     fn token_boundary(char: char) -> bool {
         char.is_whitespace() || Self::needs_escaping(char)
     }
+
+    // Klang save the soul of the next person to read this code.
     fn consume_text_token(&mut self) -> Token {
         let mut text = String::new();
         let start_of_token = self.cursor_column;
 
         loop {
+            // Todo: optimize out this .to_string.
             let segment = self.take_while(|x| !Self::token_boundary(x)).to_string();
             self.cursor_column += segment.len();
             text.push_str(&segment);

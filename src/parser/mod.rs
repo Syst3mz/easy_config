@@ -99,11 +99,7 @@ impl Parser {
             collection.push(self.parse_expr()?)
         }
 
-        if collection.len() == 1 {
-            Ok(collection.remove(0))
-        } else {
-            Ok(Expression::Collection(collection))
-        }
+        Ok(Expression::Collection(collection).minimized())
     }
 }
 
