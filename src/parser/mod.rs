@@ -93,7 +93,7 @@ impl Parser {
         }
     }
 
-    fn parse(&mut self) -> Result<Expression, ParserError> {
+    pub fn parse(&mut self) -> Result<Expression, ParserError> {
         let mut collection = vec![];
         while !self.finished() {
             collection.push(self.parse_expr()?)
