@@ -143,3 +143,18 @@ impl<T: Deserialize> Deserialize for Vec<T> {
     }
 }
 
+impl<T: Serialize> Serialize for Box<T> {
+    fn serialize(&self) -> Expression {
+        T::serialize(self)
+    }
+}
+
+impl<T: Deserialize> Deserialize for Box<T> {
+    fn deserialize(expr: Expression) -> Result<Self, Error>
+    where
+        Self: Sized
+    {
+        Ok(Box::new(T::deserialize(expr)?))
+    }
+}
+
