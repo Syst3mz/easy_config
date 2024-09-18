@@ -1,5 +1,4 @@
 use std::fmt::{Display, Formatter};
-use std::str::FromStr;
 use crate::parser::expression::Expression::{Collection, Pair, Presence};
 
 #[derive(Debug, Clone,Ord, PartialOrd, Eq, PartialEq)]
@@ -47,18 +46,6 @@ impl Expression {
         }
     }
 
-    /// Insert the value into the expression. Values which are not `Collection`s will be promoted to
-    /// `Collection`s to support this.
-    pub fn insert(&mut self, item: Expression) {
-        match self {
-            Presence(_) | Pair(_, _) => {
-                let old = std::mem::replace(self, Presence(String::new()));
-                *self = Collection(vec![old, item])
-            }
-            Collection(c) => c.push(item)
-        }
-    }
-
     /// Convert this Expression to the smallest form which holds it. I.E. `Collection`s with 1 element
     /// are replaced with that element, removing the collection.
     pub fn minimized(mut self) -> Self{
@@ -73,45 +60,21 @@ impl Expression {
         self
     }
 
-    /// Checks if there is a `Presence` which matches or a `Pair` whose key matches or if a
-    /// `Collection`'s direct descendant matches.
-    pub fn exists(&self, needle: impl AsRef<str>) -> bool {
-        let needle = needle.as_ref();
+    pub fn get(&self, key: impl AsRef<str>) -> Option<Expression> {
+        let key = key.as_ref();
         match self {
-            Presence(s) => s == needle,
-            Pair(s, _) => s == needle,
-            Collection(collection) => {
-                for expr in collection {
-                    match expr {
-                        Presence(_) | Pair(_, _) => return expr.exists(needle),
-                        _ => { }
-                    }
+            Presence(p) => Some(Presence(p.to_string())),
+            Pair(k, v) => {
+                if key == k {
+                    Some(*v.clone())
+                } else {
+                    None
                 }
-
-                false
             }
-        }
-    }
-
-    /// Checks if there is a `Presence` which matches or a `Pair` whose key matches or if that is
-    /// true in any child expression. Returns a readonly reference to the matching expression if one
-    /// is found.
-    pub fn explore_for(&self, needle: impl AsRef<str>) -> Option<&Expression> {
-        let needle = needle.as_ref();
-        match self {
-            Presence(s) => (s == needle).then(|| self),
-            Pair(s, e) => {
-                if s == needle {
-                    return Some(self)
-                }
-
-                e.explore_for(needle)
-            },
-            Collection(collection) => {
-                for expr in collection {
-                    let explored = expr.explore_for(needle);
-                    if explored.is_some() {
-                        return explored;
+            Collection(c) => {
+                for e in c {
+                    if let Some(e) = e.get(key) {
+                        return Some(e);
                     }
                 }
 
@@ -119,24 +82,12 @@ impl Expression {
             }
         }
     }
-
-    /// Gets the string stored in a `Presence` if `self` is a `Presence`.
-    pub fn get_presence_value(&self) -> Option<&String> {
+    pub fn release(&self) -> Option<&String> {
         match self {
-            Presence(s) => Some(s),
-            _ => None
+            Presence(p) => Some(p),
+            Pair(_, v) => v.release(),
+            Collection(_) => None
         }
-    }
-
-
-    /// Get the value of a key in an `Expression` if that key exists and has a single `Presence`
-    /// value and the string stored in that `Presence` can be converted by `T::FromStr`.
-    pub fn get_from_key<T: FromStr>(&self, key: impl AsRef<str>) -> Option<Result<T, <T as FromStr>::Err>> {
-        let needle = key.as_ref();
-        let maybe_pair = self.explore_for(needle)?;
-        let Pair(_, value) = maybe_pair else { return None; };
-        let value = value.get_presence_value()?;
-        Some(T::from_str(value))
     }
 }
 
@@ -149,7 +100,6 @@ impl Display for Expression {
 #[cfg(test)]
 mod tests {
     use crate::parser::expression::Expression::{Collection, Presence};
-    use crate::parser::Parser;
     use super::*;
 
     fn nested() -> Expression {
@@ -181,63 +131,21 @@ mod tests {
         assert_eq!(more_nested().pretty(), String::from("alphabet = (\n\talphabet = (\n\t\ta\n\t\tb\n\t\tc\n\t)\n\talphabet = (\n\t\ta\n\t\tb\n\t\tc\n\t)\n)"))
     }
 
-    #[test]
-    fn insert_single() {
-        let mut start = Parser::new("a = 1").parse().unwrap();
-        let addition = Parser::new("b = (1 2)").parse().unwrap();
-        let correct = Parser::new("a = 1 b = (1 2)").parse().unwrap();
-        start.insert(addition);
-        assert_eq!(start, correct)
+    fn get_demo_expr() -> Expression {
+        Collection(vec![
+            Pair("key".to_string(), Box::new(Presence("cat".to_string()))),
+            Pair("vec".to_string(), Box::new(Collection(vec![
+                Presence("bird".to_string()),
+                Presence("dog".to_string()),
+            ]))),
+        ])
     }
-
-    #[test]
-    fn insert_collection() {
-        let mut start = Parser::new("(1 2)").parse().unwrap();
-        let addition = Parser::new("3").parse().unwrap();
-        let correct = Parser::new("1 2 3").parse().unwrap();
-        start.insert(addition);
-        assert_eq!(start, correct)
-    }
-
-    #[test]
-    fn exists() {
-        let expr = Parser::new("a = 1 b = (1 2)").parse().unwrap();
-        assert!(expr.exists("a"))
-    }
-
-    #[test]
-    fn not_exists() {
-        let expr = Parser::new("a = 1 b = (1 2 c = 2)").parse().unwrap();
-        assert!(!expr.exists("z"))
-    }
-
-    #[test]
-    fn not_exists_nesting() {
-        let expr = Parser::new("a = 1 b = (1 2 c = 2)").parse().unwrap();
-        assert!(!expr.exists("c"))
-    }
-
-    #[test]
-    fn explore() {
-        let expr = Parser::new("a = 1 b = (1 2 c = 2)").parse().unwrap();
-        assert!(expr.explore_for("a").is_some())
-    }
-
-    #[test]
-    fn not_explore() {
-        let expr = Parser::new("a = 1 b = (1 2 c = 2)").parse().unwrap();
-        assert!(expr.explore_for("z").is_none())
-    }
-
-    #[test]
-    fn nested_explore() {
-        let expr = Parser::new("a = 1 b = (1 2 c = 2)").parse().unwrap();
-        assert!(expr.explore_for("c").is_some())
-    }
-
     #[test]
     fn get() {
-        let expr = Parser::new("a = 1 b = (1 2 c = 2)").parse().unwrap();
-        assert_eq!(expr.get_from_key::<i32>("a").unwrap().unwrap(), 1)
+        let gotten = get_demo_expr().get("vec").unwrap();
+        assert_eq!(gotten, Collection(vec![
+            Presence("bird".to_string()),
+            Presence("dog".to_string()),
+        ]))
     }
 }
