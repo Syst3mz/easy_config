@@ -8,7 +8,8 @@ pub enum Error {
     ParseIntError(ParseIntError),
     ParseFloatError(ParseFloatError),
     UnableToFindKey(String),
-    ExpectedTypeGot(String, String)
+    ExpectedTypeGot(String, String),
+    WrongNumberOfElements(usize, usize)
 }
 
 impl From<ParseIntError> for Error {
@@ -31,7 +32,8 @@ impl Display for Error {
             Error::ParseIntError(e) => e.to_string(),
             Error::ParseFloatError(e) => e.to_string(),
             Error::UnableToFindKey(k) => k.to_string(),
-            Error::ExpectedTypeGot(t, k) => format!("Expected a `{}` but found: {}.", t, k)
+            Error::ExpectedTypeGot(t, k) => format!("Expected a `{}` but found: {}.", t, k),
+            Error::WrongNumberOfElements(g, e) => format!("Wrong number of elements for Expected {} got {}.", e, g)
         })
     }
 }

@@ -1,21 +1,43 @@
 mod primitives;
-mod deserialize;
 mod error;
-mod deserialization_iter;
+mod tuples;
 
 use crate::parser::expression::Expression;
+use crate::config::error::Error;
 
-trait Serialize: 'static {
+pub trait Config: 'static {
     fn serialize(&self) -> Expression;
+    fn deserialize(expr: Expression) -> Result<Self, Error> where Self: Sized;
 }
 
+
+type DeserializationIterator = std::vec::IntoIter<Expression>;
+
+pub trait DeserializeExtension {
+    fn deserialize_get(&self, key: impl AsRef<str>) -> Result<Expression, Error>;
+    fn into_deserialization_iterator(self) -> Option<DeserializationIterator>;
+}
+
+impl DeserializeExtension for Expression {
+    fn deserialize_get(&self, key: impl AsRef<str>) -> Result<Expression, Error> {
+        let key = key.as_ref();
+        self.get(key).ok_or(Error::UnableToFindKey(format!("Unable to find key \"{}\"", key)))
+    }
+
+    fn into_deserialization_iterator(self) -> Option<DeserializationIterator> {
+        match self {
+            Expression::Presence(_) => Some(vec![self].into_iter()),
+            Expression::Pair(_, _) => None,
+            Expression::Collection(c) => Some(c.into_iter())
+        }
+    }
+}
 
 
 #[cfg(test)]
 mod tests {
     use crate::parser::Parser;
-    use crate::serialization::deserialize::{Deserialize, DeserializeExtension};
-    use crate::serialization::error::Error;
+    use crate::config::error::Error;
     use super::*;
 
     #[derive(Debug, PartialEq)]
@@ -24,18 +46,15 @@ mod tests {
         vec: Vec<String>,
     }
 
-    impl Serialize for Demo {
+    impl Config for Demo {
         fn serialize(&self) -> Expression {
             Expression::Collection(vec![
                 Expression::Pair("key".to_string(), Box::new(self.key.serialize())),
                 Expression::Pair("vec".to_string(), Box::new(self.vec.serialize()))
             ])
         }
-    }
 
-    impl Deserialize for Demo {
-        fn deserialize(expr: Expression) -> Result<Self, Error> where Self: Sized
-        {
+        fn deserialize(expr: Expression) -> Result<Self, Error> {
             Ok(Self {
                 key: String::deserialize(expr.deserialize_get("key")?)?,
                 vec: Vec::<String>::deserialize(expr.deserialize_get("vec")?)?
