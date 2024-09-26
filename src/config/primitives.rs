@@ -132,7 +132,6 @@ impl<K: Config+Hash+Eq, V: Config> Config for HashMap<K, V> {
         Ok(hm)
     }
 }
-
 impl<T: Config> Config for Box<T> {
     fn serialize(&self) -> Expression {
         T::serialize(self)
