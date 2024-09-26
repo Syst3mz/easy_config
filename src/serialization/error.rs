@@ -13,7 +13,7 @@ pub enum Error {
     ExpectedTypeGot(String, String),
     ParseBoolError(ParseBoolError),
     ParseCharError(ParseCharError),
-    WrongNumberOfElements(usize, usize)
+    WrongNumberOfElements(usize, usize),
 }
 
 impl From<ParseIntError> for Error {
