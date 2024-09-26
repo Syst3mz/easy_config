@@ -1,5 +1,7 @@
+use std::char::ParseCharError;
 use std::fmt::{Display, Formatter};
 use std::num::{ParseFloatError, ParseIntError};
+use std::str::ParseBoolError;
 
 #[derive(Debug)]
 pub enum Error {
@@ -9,6 +11,8 @@ pub enum Error {
     ParseFloatError(ParseFloatError),
     UnableToFindKey(String),
     ExpectedTypeGot(String, String),
+    ParseBoolError(ParseBoolError),
+    ParseCharError(ParseCharError),
     WrongNumberOfElements(usize, usize)
 }
 
@@ -24,6 +28,18 @@ impl From<ParseFloatError> for Error {
     }
 }
 
+impl From<ParseBoolError> for Error {
+    fn from(value: ParseBoolError) -> Self {
+        Self::ParseBoolError(value)
+    }
+}
+
+impl From<ParseCharError> for Error {
+    fn from(value: ParseCharError) -> Self {
+        Self::ParseCharError(value)
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", match self {
@@ -33,7 +49,9 @@ impl Display for Error {
             Error::ParseFloatError(e) => e.to_string(),
             Error::UnableToFindKey(k) => k.to_string(),
             Error::ExpectedTypeGot(t, k) => format!("Expected a `{}` but found: {}.", t, k),
-            Error::WrongNumberOfElements(g, e) => format!("Wrong number of elements for Expected {} got {}.", e, g)
+            Error::WrongNumberOfElements(g, e) => format!("Wrong number of elements. Expected {} got {}.", e, g),
+            Error::ParseBoolError(e) => e.to_string(),
+            Error::ParseCharError(e) => e.to_string(),
         })
     }
 }

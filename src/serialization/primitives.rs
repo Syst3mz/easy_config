@@ -2,9 +2,9 @@ use std::any::type_name;
 use std::collections::HashMap;
 use std::hash::Hash;
 use crate::parser::expression::{escape, Expression};
-use crate::config::error::Error;
-use crate::config::{Config, DeserializeExtension};
-use crate::config::error::Error::WrongNumberOfElements;
+use crate::serialization::error::Error;
+use crate::serialization::{Config, DeserializeExtension};
+use crate::serialization::error::Error::{ExpectedCollectionGot, WrongNumberOfElements};
 use crate::parser::expression::Expression::Presence;
 
 macro_rules! config {
@@ -38,6 +38,9 @@ config!(u128);
 
 config!(f32);
 config!(f64);
+
+config!(bool);
+config!(char);
 
 
 impl Config for String {
@@ -98,9 +101,11 @@ impl<T: Config> Config for Vec<T> {
         Ok(Result::from_iter(elements.map(|x| T::deserialize(x)))?)
     }
 }
-impl<K: Config+Hash+Eq, V: Config> Config for HashMap<K, V> {
+impl<K: Clone+Config+Hash+Eq, V: Clone+Config> Config for HashMap<K, V> {
     fn serialize(&self) -> Expression {
-        Expression::Collection(Vec::from_iter(self.iter().map(|(k, v)| Expression::Collection(vec![k.serialize(), v.serialize()]))))
+        Expression::Collection(Vec::from_iter(
+            self.iter().map(|(k, v)| (k.clone(), v.clone()).serialize())
+        ))
     }
 
     fn deserialize(expr: Expression) -> Result<Self, Error> {
@@ -110,25 +115,10 @@ impl<K: Config+Hash+Eq, V: Config> Config for HashMap<K, V> {
             .ok_or(Error::ExpectedCollectionGot(expr.pretty()))?;
 
         let mut hm = HashMap::new();
-
         for kv_pair in kv_pairs {
-            let mut kv_pair_iter = kv_pair
-                .clone()
-                .into_deserialization_iterator()
-                .ok_or(Error::ExpectedCollectionGot(kv_pair.pretty()))?;
-            let k = kv_pair_iter
-                .next()
-                .ok_or(Error::ExpectedTypeGot(type_name::<K>().to_string(), kv_pair.pretty()))?;
-            let k = K::deserialize(k)?;
-
-            let v = kv_pair_iter
-                .next()
-                .ok_or(Error::ExpectedTypeGot(type_name::<V>().to_string(), kv_pair.pretty()))?;
-            let v = V::deserialize(v)?;
-
-            hm.insert(k, v);
+            let (k,v) = <(K, V)>::deserialize(kv_pair)?;
+            hm.insert(k ,v);
         }
-
         Ok(hm)
     }
 }
@@ -139,6 +129,29 @@ impl<T: Config> Config for Box<T> {
 
     fn deserialize(expr: Expression) -> Result<Self, Error> {
         Ok(Box::new(T::deserialize(expr)?))
+    }
+}
+
+impl Config for () {
+    fn serialize(&self) -> Expression {
+        Expression::Collection(vec![])
+    }
+
+    fn deserialize(expr: Expression) -> Result<Self, Error>
+    where
+        Self: Sized
+    {
+        match expr {
+            Presence(_) => Err(ExpectedCollectionGot(expr.pretty())),
+            Expression::Pair(_, _) => Err(ExpectedCollectionGot(expr.pretty())),
+            Expression::Collection(c) => {
+                if !c.is_empty() {
+                    Err(WrongNumberOfElements(0, c.len()))
+                } else {
+                    Ok(())
+                }
+            }
+        }
     }
 }
 

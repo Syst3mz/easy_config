@@ -1,9 +1,9 @@
 mod primitives;
-mod error;
+pub mod error;
 mod tuples;
 
 use crate::parser::expression::Expression;
-use crate::config::error::Error;
+use crate::serialization::error::Error;
 
 pub trait Config: 'static {
     fn serialize(&self) -> Expression;
@@ -37,7 +37,7 @@ impl DeserializeExtension for Expression {
 #[cfg(test)]
 mod tests {
     use crate::parser::Parser;
-    use crate::config::error::Error;
+    use crate::serialization::error::Error;
     use super::*;
 
     #[derive(Debug, PartialEq)]

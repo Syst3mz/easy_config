@@ -60,6 +60,7 @@ impl Expression {
         self
     }
 
+    /// Get a value by key if it exists.
     pub fn get(&self, key: impl AsRef<str>) -> Option<Expression> {
         let key = key.as_ref();
         match self {
@@ -82,6 +83,8 @@ impl Expression {
             }
         }
     }
+
+    /// Return the value stored in an `Expression` as a `&String` IFF it is a singular value.
     pub fn release(&self) -> Option<&String> {
         match self {
             Presence(p) => Some(p),
