@@ -1,14 +1,11 @@
 use derive::Config;
-use easy_config::parser::expression::Expression;
 use easy_config::serialization::Config;
 
 #[derive(Config, PartialEq, Debug)]
 enum Mode {
-    First,
-    /*Second(f32),
-    Third(f32, i32),
-    Fourth {a: f32, b: i32}*/
-    Fifth
+    Unit,
+    TupleLike(f32, i32),
+    StructLike {a: f32, b: i32},
 }
 
 // impl Config for Mode {
@@ -37,53 +34,23 @@ enum Mode {
 
 #[cfg(test)]
 mod tests {
-    use easy_config::parser::Parser;
     use super::*;
 
     #[test]
-    fn serialize_mode_one() {
-        let x = Mode::First;
-        assert_eq!(x.serialize().dump(), "First")
+    fn serialize_unit() {
+        let x = Mode::Unit;
+        assert_eq!(x.serialize().dump(), "Unit")
     }
 
     #[test]
-    fn serialize_mode_five() {
-        let x = Mode::Fifth;
-        assert_eq!(x.serialize().dump(), "Fifth")
+    fn serialize_tuple_like() {
+        let x = Mode::TupleLike(2.0, 4);
+        assert_eq!(x.serialize().dump(), "(TupleLike 2 4)")
     }
 
     #[test]
-    fn deserialize_mode_one() {
-        let text = Mode::First.serialize().dump();
-        let parsed = Parser::new(text).parse().unwrap();
-        assert_eq!(Mode::deserialize(parsed).unwrap(), Mode::First)
+    fn serialize_struct_like() {
+        let x = Mode::StructLike { a: 2.0, b: 4 };
+        assert_eq!(x.serialize().dump(), "(StructLike a = 2 b = 4)")
     }
-
-    #[test]
-    fn deserialize_mode_five() {
-        let text = Mode::Fifth.serialize().dump();
-        let parsed = Parser::new(text).parse().unwrap();
-        assert_eq!(Mode::deserialize(parsed).unwrap(), Mode::Fifth)
-    }
-
-    /*#[test]
-    fn serialize_mode_two() {
-        let x = Mode::Second(3.0);
-        assert_eq!(x.serialize().dump(), "(Second 3)")
-    }
-
-    #[test]
-    fn serialize_mode_three() {
-        let x = Mode::Third(1.0, 2);
-        assert_eq!(x.serialize().dump(), "(Third 1 2)")
-    }
-
-    #[test]
-    fn serialize_mode_fourth() {
-        let x = Mode::Fourth {
-            a: 1.0,
-            b: 2,
-        };
-        assert_eq!(x.serialize().dump(), "(Fourth a = 1 b = 2)")
-    }*/
 }
