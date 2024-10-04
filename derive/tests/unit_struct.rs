@@ -1,4 +1,3 @@
-use easy_config::parser::expression::Expression;
 use easy_config::serialization::Config;
 use derive::Config;
 
@@ -13,7 +12,7 @@ mod tests {
     #[test]
     fn serialize() {
         let x = Unit;
-        assert_eq!(x.serialize().dump(), "()")
+        assert_eq!(x.serialize().dump(), "Unit")
     }
 
     #[test]

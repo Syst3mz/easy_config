@@ -34,6 +34,7 @@ enum Mode {
 
 #[cfg(test)]
 mod tests {
+    use easy_config::parser::Parser;
     use super::*;
 
     #[test]
@@ -52,5 +53,26 @@ mod tests {
     fn serialize_struct_like() {
         let x = Mode::StructLike { a: 2.0, b: 4 };
         assert_eq!(x.serialize().dump(), "(StructLike a = 2 b = 4)")
+    }
+
+    #[test]
+    fn deserialize_unit() {
+        let text = Mode::Unit.serialize().dump();
+        let parsed = Parser::new(text).parse().unwrap();
+        assert_eq!(Mode::deserialize(parsed).unwrap(), Mode::Unit)
+    }
+
+    #[test]
+    fn deserialize_tuple_like() {
+        let text = Mode::TupleLike(2.0, 4).serialize().dump();
+        let parsed = Parser::new(text).parse().unwrap();
+        assert_eq!(Mode::deserialize(parsed).unwrap(), Mode::TupleLike(2.0, 4))
+    }
+
+    #[test]
+    fn deserialize_struct_like() {
+        let text = Mode::StructLike { a: 2.0, b: 4 }.serialize().dump();
+        let parsed = Parser::new(text).parse().unwrap();
+        assert_eq!(Mode::deserialize(parsed).unwrap(), Mode::StructLike { a: 2.0, b: 4 })
     }
 }
