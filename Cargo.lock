@@ -3,25 +3,25 @@
 version = 3
 
 [[package]]
-name = "core"
-version = "0.2.0"
-
-[[package]]
-name = "derive"
-version = "0.1.0"
-dependencies = [
- "core",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "easy_config"
 version = "0.2.0"
 dependencies = [
- "core",
- "derive",
+ "easy_config_core",
+ "easy_config_derive",
+]
+
+[[package]]
+name = "easy_config_core"
+version = "0.2.0"
+
+[[package]]
+name = "easy_config_derive"
+version = "0.1.0"
+dependencies = [
+ "easy_config_core",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
