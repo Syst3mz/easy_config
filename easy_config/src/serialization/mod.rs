@@ -23,6 +23,8 @@ pub trait DefaultConfig: Config + Default {
     }
 }
 
+impl<T: Default + Config> DefaultConfig for T {}
+
 
 type DeserializationIterator = std::vec::IntoIter<Expression>;
 
