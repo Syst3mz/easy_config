@@ -4,13 +4,12 @@ use crate::serialization::error::Error;
 
 #[allow(dead_code)]
 pub trait StringExtension<T> {
-    fn deserialize(text: impl AsRef<str>) -> Result<T, Error>;
+    fn deserialize(&self) -> Result<T, Error>;
 }
 
 #[allow(dead_code)]
 impl<T: AsRef<str>, R: Config> StringExtension<R> for T {
-    fn deserialize(text: impl AsRef<str>) -> Result<R, Error> {
-        R::deserialize(Parser::new(text).parse()?)
-
+    fn deserialize(&self) -> Result<R, Error> {
+        R::deserialize(Parser::new(self).parse()?)
     }
 }

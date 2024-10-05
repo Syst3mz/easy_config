@@ -151,4 +151,41 @@ mod tests {
             Presence("dog".to_string()),
         ]))
     }
+
+    #[test]
+    fn pretty_harder() {
+        let make_pretty = Collection(vec![
+            Pair("run_name".to_string(), Box::new(Presence("first".to_string()))),
+            Pair("names_in_run".to_string(), Box::new(Collection(vec![
+                Collection(vec![Presence("HandMade".to_string()), Presence("Ethan".to_string())]),
+                Collection(vec![Presence("HandMade".to_string()), Presence("James".to_string())]),
+                Collection(vec![Presence("Generated".to_string()), Presence("SDKJLHF".to_string())]),
+                Collection(vec![Presence("Generated".to_string()), Presence("Kerflooble".to_string())]),
+            ]))),
+            Pair("count".to_string(), Box::new(Presence("2".to_string())))
+        ]);
+
+        assert_eq!(make_pretty.pretty(),
+"(\n\trun_name = first
+\tnames_in_run = (
+\t\t(
+\t\t\tHandMade
+\t\t\tEthan
+\t\t)
+\t\t(
+\t\t\tHandMade
+\t\t\tJames
+\t\t)
+\t\t(
+\t\t\tGenerated
+\t\t\tSDKJLHF
+\t\t)
+\t\t(
+\t\t\tGenerated
+\t\t\tKerflooble
+\t\t)
+\t)
+\tcount = 2
+)")
+    }
 }
