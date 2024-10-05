@@ -5,7 +5,8 @@ struct Point(f32, f32);
 
 #[cfg(test)]
 mod tests {
-    use easy_config_core::parser::Parser;
+    use easy_config::parser::Parser;
+    use easy_config::serialization::Config;
     use super::*;
 
     fn point() -> Point {

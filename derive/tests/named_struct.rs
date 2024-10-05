@@ -8,8 +8,8 @@ struct Vec2 {
 
 #[cfg(test)]
 mod tests {
-    use easy_config_core::parser::Parser;
-    use easy_config_core::serialization::Config;
+    use easy_config::parser::Parser;
+    use easy_config::serialization::Config;
     use super::*;
 
     #[test]

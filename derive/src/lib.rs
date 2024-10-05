@@ -71,7 +71,7 @@ fn serialize_variant(variant: &Variant) -> TokenStream {
 
 
     quote! {
-        easy_config_core::expression::Expression::Collection(vec![
+        easy_config::expression::Expression::Collection(vec![
             Expression::Presence(stringify!(#variant_name).to_string()),
             #(#serializations),*
         ])
@@ -300,17 +300,16 @@ pub fn config(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     };
 
     let gen = quote! {
-        use easy_config_core::serialization::Config;
-        impl easy_config_core::serialization::Config for #name {
-            fn serialize(&self) -> easy_config_core::expression::Expression {
-                use easy_config_core::expression::Expression;
+        impl easy_config::serialization::Config for #name {
+            fn serialize(&self) -> easy_config::expression::Expression {
+                use easy_config::expression::Expression;
                 #serialization
             }
 
-            fn deserialize(expr: easy_config_core::expression::Expression) -> Result<Self, easy_config_core::serialization::error::Error> where Self: Sized {
-                use easy_config_core::expression::Expression;
-                use easy_config_core::serialization::DeserializeExtension;
-                use easy_config_core::serialization::error::Error;
+            fn deserialize(expr: easy_config::expression::Expression) -> Result<Self, easy_config::serialization::error::Error> where Self: Sized {
+                use easy_config::expression::Expression;
+                use easy_config::serialization::DeserializeExtension;
+                use easy_config::serialization::error::Error;
 
                 let mut fields = expr
                     .clone()

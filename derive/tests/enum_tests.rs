@@ -34,7 +34,8 @@ enum Mode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use easy_config_core::parser::Parser;
+    use easy_config::parser::Parser;
+    use easy_config::serialization::Config;
 
     #[test]
     fn serialize_unit() {

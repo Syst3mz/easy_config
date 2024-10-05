@@ -29,12 +29,14 @@ config!(i16);
 config!(i32);
 config!(i64);
 config!(i128);
+config!(isize);
 
 config!(u8);
 config!(u16);
 config!(u32);
 config!(u64);
 config!(u128);
+config!(usize);
 
 config!(f32);
 config!(f64);
