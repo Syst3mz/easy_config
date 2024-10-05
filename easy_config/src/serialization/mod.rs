@@ -1,7 +1,7 @@
 mod primitives;
 pub mod error;
 mod tuples;
-mod string_extension;
+pub mod string_extension;
 
 use crate::expression::Expression;
 use crate::serialization::error::Error;
