@@ -1,14 +1,26 @@
 mod primitives;
 pub mod error;
 mod tuples;
-pub mod string_extension;
 
+use std::path::Path;
 use crate::expression::Expression;
+use crate::parser::Parser;
 use crate::serialization::error::Error;
 
 pub trait Config: 'static {
     fn serialize(&self) -> Expression;
     fn deserialize(expr: Expression) -> Result<Self, Error> where Self: Sized;
+}
+
+pub trait DefaultConfig: Config + Default {
+    fn deserialize_from_file_or_default(path: impl AsRef<Path>) -> Result<Self, Error> where Self: Sized {
+        let path = path.as_ref();
+        if std::fs::exists(path)? {
+            Self::deserialize(Parser::parse(std::fs::read_to_string(path)?)?)
+        } else {
+            Ok(Self::default())
+        }
+    }
 }
 
 
@@ -79,7 +91,7 @@ mod tests {
 
     #[test]
     fn deserialize() {
-        let parsed = Parser::new(demo().serialize().dump()).parse().unwrap();
+        let parsed = Parser::new(demo().serialize().dump()).parse_tokens().unwrap();
         assert_eq!(
             Demo::deserialize(parsed).unwrap(), demo()
         )

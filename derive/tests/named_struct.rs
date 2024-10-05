@@ -20,7 +20,7 @@ mod tests {
     #[test]
     fn deserialize() {
         let text = Vec2 {x: 1.0, y: 2.0}.serialize().dump();
-        let parsed = Parser::new(text).parse().unwrap();
+        let parsed = Parser::new(text).parse_tokens().unwrap();
         assert_eq!(Vec2::deserialize(parsed).unwrap(), Vec2 {x: 1.0, y: 2.0})
     }
 }

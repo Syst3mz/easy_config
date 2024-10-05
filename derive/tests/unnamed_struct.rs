@@ -21,7 +21,7 @@ mod tests {
     #[test]
     fn deserialize() {
         let text = point().serialize().dump();
-        let parsed = Parser::new(text).parse().unwrap();
+        let parsed = Parser::new(text).parse_tokens().unwrap();
 
         assert_eq!(Point::deserialize(parsed).unwrap(), point())
     }

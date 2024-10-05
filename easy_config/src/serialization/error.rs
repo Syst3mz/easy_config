@@ -15,7 +15,8 @@ pub enum Error {
     ParseBoolError(ParseBoolError),
     ParseCharError(ParseCharError),
     WrongNumberOfElements(usize, usize),
-    ParserError(ParserError)
+    ParserError(ParserError),
+    IoError(std::io::Error)
 }
 
 impl From<ParseIntError> for Error {
@@ -47,6 +48,11 @@ impl From<ParserError> for Error {
         Self::ParserError(value)
     }
 }
+impl From<std::io::Error> for Error {
+    fn from(value: std::io::Error) -> Self {
+        Self::IoError(value)
+    }
+}
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -61,6 +67,7 @@ impl Display for Error {
             Error::ParseBoolError(e) => e.to_string(),
             Error::ParseCharError(e) => e.to_string(),
             Error::ParserError(e) => e.to_string(),
+            Error::IoError(e) => e.to_string()
         })
     }
 }

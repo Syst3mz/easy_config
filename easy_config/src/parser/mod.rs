@@ -92,13 +92,17 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Expression, ParserError> {
+    pub fn parse_tokens(&mut self) -> Result<Expression, ParserError> {
         let mut collection = vec![];
         while !self.finished() {
             collection.push(self.parse_expr()?)
         }
 
         Ok(Expression::Collection(collection).minimized())
+    }
+
+    pub fn parse(text: impl AsRef<str>) -> Result<Expression, ParserError> {
+        Parser::new(text).parse_tokens()
     }
 }
 
@@ -109,19 +113,19 @@ mod tests {
 
     #[test]
     fn presence() {
-        let p = Parser::new("some-key").parse().unwrap();
+        let p = Parser::new("some-key").parse_tokens().unwrap();
         assert_eq!(p, Presence(String::from("some-key")))
     }
 
     #[test]
     fn pair() {
-        let p = Parser::new("some-key = value").parse().unwrap();
+        let p = Parser::new("some-key = value").parse_tokens().unwrap();
         assert_eq!(p, Pair(String::from("some-key"), Box::new(Presence(String::from("value")))))
     }
 
     #[test]
     fn paired_collection() {
-        let p = Parser::new("some-key = (a b)").parse().unwrap();
+        let p = Parser::new("some-key = (a b)").parse_tokens().unwrap();
         assert_eq!(p, Pair(String::from("some-key"), Box::new(Collection(vec![
             Presence(String::from("a")),
             Presence(String::from("b"))
@@ -130,7 +134,7 @@ mod tests {
 
     #[test]
     fn nesting() {
-        let p = Parser::new("some-key = (a = b c)").parse().unwrap();
+        let p = Parser::new("some-key = (a = b c)").parse_tokens().unwrap();
         assert_eq!(p, Pair(String::from("some-key"), Box::new(Collection(vec![
             Pair(String::from("a"), Box::new(Presence(String::from("b")))),
             Presence(String::from("c"))
@@ -139,7 +143,7 @@ mod tests {
 
     #[test]
     fn collection() {
-        let p = Parser::new("(a b)").parse().unwrap();
+        let p = Parser::new("(a b)").parse_tokens().unwrap();
         assert_eq!(p, Collection(vec![Presence(String::from("a")), Presence(String::from("b"))]))
     }
 
@@ -157,6 +161,6 @@ escaped-characters = (
     \=
     \\
 )";
-        Parser::new(text).parse().unwrap();
+        Parser::new(text).parse_tokens().unwrap();
     }
 }
