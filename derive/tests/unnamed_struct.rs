@@ -1,11 +1,11 @@
-use derive::Config;
+use easy_config_derive::Config;
 
 #[derive(Config, Debug, PartialEq)]
 struct Point(f32, f32);
 
 #[cfg(test)]
 mod tests {
-    use core::parser::Parser;
+    use easy_config_core::parser::Parser;
     use super::*;
 
     fn point() -> Point {

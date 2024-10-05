@@ -14,8 +14,8 @@ keywords = ["config"]
 members = ["core", "derive"]
 
 [dependencies]
-core = {path = "core"}
-derive = {path = "derive", optional = true}
+easy_config_core  = {path = "core"}
+easy_config_derive = {path = "derive", optional = true}
 
 [features]
-derive = ["dep:derive"]
+derive = ["dep:easy_config_derive"]
