@@ -1,5 +1,3 @@
-mod scratch_1;
-
 extern crate proc_macro;
 
 
@@ -73,7 +71,7 @@ fn serialize_variant(variant: &Variant) -> TokenStream {
 
 
     quote! {
-        easy_config::parser::expression::Expression::Collection(vec![
+        core::expression::Expression::Collection(vec![
             Expression::Presence(stringify!(#variant_name).to_string()),
             #(#serializations),*
         ])
@@ -180,60 +178,60 @@ fn deserialize_field(name: Option<&Ident>, ty: &Type) -> TokenStream {
 }
 
 
-fn specifier_quote(enum_name: &Ident, variant_name: &Ident, inside: TokenStream) -> TokenStream {
-    quote! {
-        let specifier = specifier_expr
-        .release()
-        .ok_or(Error::ExpectedTypeGot(stringify!(#enum_name).to_string(), specifier_expr.pretty()))?;
-
-        if specifier == stringify!(#variant_name) {
-            #inside
-        }
-    }
-}
-
 fn deserialize_enum_variant(variant: &Variant, enum_name: &Ident) -> TokenStream {
     let variant_name = &variant.ident;
 
-    match &variant.fields {
+    let deserialization = match &variant.fields {
         Fields::Named(n) => {
             let deserializations = n.named.iter().map(|x| deserialize_struct_like_field(x.ident.as_ref().unwrap(), &x.ty));
-            return specifier_quote(enum_name, variant_name, quote! {
-                return Ok(#enum_name::#variant_name{
+            quote! {
+                #enum_name::#variant_name{
                     #(#deserializations),*
-                })
-            });
+                }
+            }
         },
         Fields::Unnamed(u) => {
             let deserializations = u.unnamed.iter().map(|x| deserialize_tuple_like_field(&x.ty));
-            specifier_quote(enum_name, variant_name, quote! {
-                return Ok(#enum_name::#variant_name(
+            quote! {
+                #enum_name::#variant_name(
                     #(#deserializations),*
-                ));
+                )
 
-            })
+            }
         },
-        Fields::Unit => quote! {
-                match &specifier_expr {
-                    Expression::Presence(p) => return if p == stringify!(#variant_name) { Ok(#enum_name::#variant_name) } else { Err(Error::ExpectedTypeGot(stringify!(#variant_name).to_string(), specifier_expr.pretty())) },
-                    _ => {}
-                }
-        },
+        Fields::Unit => quote! {#enum_name::#variant_name},
+    };
+
+    quote! {
+        stringify!(#variant_name) => Ok(#deserialization),
     }
 }
 
 fn deserialize_enum(enm: &DataEnum, enum_name: &Ident) -> TokenStream {
+
     let variant_serializations = enm.variants
         .iter()
         .map(|variant| deserialize_enum_variant(variant, enum_name));
 
-    let specifier_expr = read_next_field_expecting(enum_name);
     quote! {
-        let specifier_expr = #specifier_expr;
+        let specifier = match &expr {
+            Expression::Presence(s) => Some(s.clone()),
+            Expression::Pair(_, _) => None,
+            Expression::Collection(c) => {
+                let specifier = c.get(0).map(|x| x.release().map(|x| x.clone())).flatten();
 
-        #(#variant_serializations)*
+                if specifier.is_some() {
+                    fields.next();
+                }
 
-        unimplemented!()
+                specifier
+            },
+        }.ok_or(Error::ExpectedTypeGot(stringify!(#enum_name).to_string(), expr.pretty()))?;
+
+        match specifier.as_str() {
+            #(#variant_serializations)*
+            _ => Err(Error::ExpectedTypeGot(stringify!(#enum_name).to_string(), expr.pretty()))
+        }
     }
 }
 
@@ -302,16 +300,17 @@ pub fn config(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     };
 
     let gen = quote! {
-        impl easy_config::serialization::Config for #name {
-            fn serialize(&self) -> easy_config::parser::expression::Expression {
-                use easy_config::parser::expression::Expression;
+        use core::serialization::Config;
+        impl core::serialization::Config for #name {
+            fn serialize(&self) -> core::expression::Expression {
+                use core::expression::Expression;
                 #serialization
             }
 
-            fn deserialize(expr: easy_config::parser::expression::Expression) -> Result<Self, easy_config::serialization::error::Error> where Self: Sized {
-                use easy_config::parser::expression::Expression;
-                use easy_config::serialization::DeserializeExtension;
-                use easy_config::serialization::error::Error;
+            fn deserialize(expr: core::expression::Expression) -> Result<Self, core::serialization::error::Error> where Self: Sized {
+                use core::expression::Expression;
+                use core::serialization::DeserializeExtension;
+                use core::serialization::error::Error;
 
                 let mut fields = expr
                     .clone()
