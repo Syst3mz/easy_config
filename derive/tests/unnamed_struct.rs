@@ -1,6 +1,3 @@
-use std::any::type_name;
-use easy_config::parser::expression::Expression;
-use easy_config::serialization::Config;
 use derive::Config;
 
 #[derive(Config, Debug, PartialEq)]
@@ -8,7 +5,7 @@ struct Point(f32, f32);
 
 #[cfg(test)]
 mod tests {
-    use easy_config::parser::Parser;
+    use core::parser::Parser;
     use super::*;
 
     fn point() -> Point {

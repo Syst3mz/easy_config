@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-use crate::parser::expression::Expression::{Collection, Pair, Presence};
+use crate::expression::Expression::{Collection, Pair, Presence};
 
 #[derive(Debug, Clone,Ord, PartialOrd, Eq, PartialEq)]
 pub enum Expression {
@@ -29,8 +29,9 @@ impl Expression {
         match self {
             Presence(s) => s.clone(),
             Pair(s, e) => format!("{} = {}", s, e.pretty()),
-            Collection(c) => format!("(\n{}\n)",
-                                                 indent(c.iter().map(|x| x.pretty()).collect::<Vec<String>>().join("\n"), "\t")
+            Collection(c) => format!(
+                "(\n{}\n)",
+                indent(c.iter().map(|x| x.pretty()).collect::<Vec<String>>().join("\n"), "\t")
             )
         }
     }
@@ -102,7 +103,6 @@ impl Display for Expression {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::expression::Expression::{Collection, Presence};
     use super::*;
 
     fn nested() -> Expression {

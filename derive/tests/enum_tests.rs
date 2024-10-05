@@ -1,5 +1,4 @@
 use derive::Config;
-use easy_config::serialization::Config;
 
 #[derive(Config, PartialEq, Debug)]
 enum Mode {
@@ -34,8 +33,8 @@ enum Mode {
 
 #[cfg(test)]
 mod tests {
-    use easy_config::parser::Parser;
     use super::*;
+    use core::parser::Parser;
 
     #[test]
     fn serialize_unit() {

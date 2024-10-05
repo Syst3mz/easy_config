@@ -1,8 +1,9 @@
 mod primitives;
 pub mod error;
 mod tuples;
+mod string_extention;
 
-use crate::parser::expression::Expression;
+use crate::expression::Expression;
 use crate::serialization::error::Error;
 
 pub trait Config: 'static {

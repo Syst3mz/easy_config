@@ -1,11 +1,11 @@
 use std::any::type_name;
 use std::collections::HashMap;
 use std::hash::Hash;
-use crate::parser::expression::{escape, Expression};
+use crate::expression::{escape, Expression};
+use crate::expression::Expression::{Collection, Presence};
 use crate::serialization::error::Error;
 use crate::serialization::{Config, DeserializeExtension};
 use crate::serialization::error::Error::{ExpectedCollectionGot, WrongNumberOfElements};
-use crate::parser::expression::Expression::Presence;
 
 macro_rules! config {
     ($ty: ty) => {
@@ -155,5 +155,46 @@ impl Config for () {
     }
 }
 
+
+impl<T: Config> Config for Option<T> {
+    fn serialize(&self) -> Expression {
+        match self {
+            None => Presence(String::from("None")),
+            Some(t) => Collection(vec![Presence(String::from("Some")), t.serialize()])
+        }
+    }
+
+    fn deserialize(expr: Expression) -> Result<Self, Error>
+    where
+        Self: Sized
+    {
+        let mut fields = expr
+            .clone()
+            .into_deserialization_iterator()
+            .ok_or(Error::ExpectedTypeGot(
+                format!("Option<{}>", type_name::<T>()), expr.pretty()
+            ))?;
+
+        let specifier = match &expr {
+            Presence(s) => Some(s.clone()),
+            Collection(c) => {
+                let specifier = c.get(0).map(|x| x.release().map(|x| x.clone())).flatten();
+
+                if specifier.is_some() {
+                    fields.next();
+                }
+
+                specifier
+            },
+            _ => None
+        }.ok_or(Error::ExpectedTypeGot(type_name::<T>().to_string(), expr.pretty()))?;
+
+        match specifier.as_str() {
+            "Some" => Ok(Some(T::deserialize(fields.next().ok_or(Error::ExpectedTypeGot(type_name::<T>().to_string(), expr.pretty()))?)?)),
+            "None" => Ok(None),
+            _ => Err(Error::ExpectedTypeGot(type_name::<T>().to_string(), expr.pretty()))
+        }
+    }
+}
 
 

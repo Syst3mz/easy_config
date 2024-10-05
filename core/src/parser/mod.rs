@@ -1,12 +1,11 @@
+use crate::expression::Expression;
+use crate::expression::Expression::Pair;
 use crate::lexer::{Lexer, token};
 use crate::lexer::token::{Kind, Token};
 use crate::lexer::token::Kind::Text;
-use crate::parser::expression::Expression;
-use crate::parser::expression::Expression::Pair;
 use crate::parser::parser_error::ParserError;
 
 pub mod parser_error;
-pub mod expression;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -105,7 +104,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::expression::Expression::{Collection, Pair, Presence};
+    use crate::expression::Expression::{Collection, Presence};
     use super::*;
 
     #[test]

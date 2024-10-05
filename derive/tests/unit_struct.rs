@@ -1,4 +1,3 @@
-use easy_config::serialization::Config;
 use derive::Config;
 
 #[derive(Config, Debug, PartialEq)]
@@ -6,7 +5,7 @@ struct Unit;
 
 #[cfg(test)]
 mod tests {
-    use easy_config::parser::Parser;
+    use core::parser::Parser;
     use super::*;
 
     #[test]

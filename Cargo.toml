@@ -10,4 +10,12 @@ readme = "README.md"
 categories = ["config"]
 keywords = ["config"]
 
+[workspace]
+members = ["core", "derive"]
+
 [dependencies]
+core = {path = "core"}
+derive = {path = "derive", optional = true}
+
+[features]
+derive = ["dep:derive"]

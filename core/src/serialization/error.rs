@@ -2,6 +2,7 @@ use std::char::ParseCharError;
 use std::fmt::{Display, Formatter};
 use std::num::{ParseFloatError, ParseIntError};
 use std::str::ParseBoolError;
+use crate::parser::parser_error::ParserError;
 
 #[derive(Debug)]
 pub enum Error {
@@ -14,6 +15,7 @@ pub enum Error {
     ParseBoolError(ParseBoolError),
     ParseCharError(ParseCharError),
     WrongNumberOfElements(usize, usize),
+    ParserError(ParserError)
 }
 
 impl From<ParseIntError> for Error {
@@ -40,6 +42,12 @@ impl From<ParseCharError> for Error {
     }
 }
 
+impl From<ParserError> for Error {
+    fn from(value: ParserError) -> Self {
+        Self::ParserError(value)
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", match self {
@@ -52,6 +60,7 @@ impl Display for Error {
             Error::WrongNumberOfElements(g, e) => format!("Wrong number of elements. Expected {} got {}.", e, g),
             Error::ParseBoolError(e) => e.to_string(),
             Error::ParseCharError(e) => e.to_string(),
+            Error::ParserError(e) => e.to_string(),
         })
     }
 }

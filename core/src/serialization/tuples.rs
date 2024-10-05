@@ -2,7 +2,7 @@ use std::any::type_name;
 use crate::serialization::{Config, DeserializeExtension};
 use crate::serialization::error::Error;
 use crate::serialization::error::Error::{ExpectedCollectionGot, ExpectedTypeGot};
-use crate::parser::expression::Expression;
+use crate::serialization::Expression;
 
 macro_rules! impl_tuple {
     ($($typ: ident),*) => {
