@@ -13,13 +13,23 @@ pub trait Config: 'static {
     fn deserialize(expr: CstExpression) -> Result<Self, Error> where Self: Sized;
 }
 
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub enum LoadMode {
+    Loaded,
+    Default
+}
+
 pub trait DefaultConfig: Config + Default {
-    fn deserialize_from_file_or_default(path: impl AsRef<Path>) -> Result<Self, Error> where Self: Sized {
+    fn deserialize_from_file_or_default_and_write(path: impl AsRef<Path>) -> Result<(Self, LoadMode), Error> where Self: Sized {
         let path = path.as_ref();
         if std::fs::exists(path)? {
-            Self::deserialize(Parser::parse(std::fs::read_to_string(path)?)?)
+            Ok((Self::deserialize(Parser::parse(std::fs::read_to_string(path)?)?)?, LoadMode::Loaded))
         } else {
-            Ok(Self::default())
+            let default = Self::default();
+
+            std::fs::write(path, default.serialize().pretty())?;
+
+            Ok((default, LoadMode::Default))
         }
     }
 }
@@ -100,6 +110,7 @@ mod tests {
         )
     }
 
+    #[should_panic]
     #[test]
     fn deserialize_err() {
         let parsed = Parser::new("(key = cat vec = a = b)").parse_tokens().unwrap();
