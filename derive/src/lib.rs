@@ -11,7 +11,7 @@ fn serialized(item: TokenStream) -> TokenStream {
 fn serialize_named(name: &Ident, variable_accessor: TokenStream) -> TokenStream {
     let serialized_accessor = serialized(variable_accessor);
     quote! {
-        Expression::Pair(String::from(stringify!(#name)), Box::new(#serialized_accessor))
+        CstExpression::pair(String::from(stringify!(#name)), #serialized_accessor)
     }
 }
 fn serialize_unnamed(variable_accessor: TokenStream) -> TokenStream {
@@ -33,10 +33,10 @@ fn serialize_struct(strct: &DataStruct, struct_name: &Ident) -> TokenStream {
 
     match strct.fields {
         Fields::Unit => quote! {
-            Expression::Presence(stringify!(#struct_name).to_string())
+            CstExpression::presence(stringify!(#struct_name).to_string())
         },
         _ => quote! {
-            Expression::Collection(vec![
+            CstExpression::collection(vec![
                 #(#serializations),*
             ])
             .minimized()
@@ -71,8 +71,8 @@ fn serialize_variant(variant: &Variant) -> TokenStream {
 
 
     quote! {
-        easy_config::expression::Expression::Collection(vec![
-            Expression::Presence(stringify!(#variant_name).to_string()),
+       CstExpression::collection(vec![
+            CstExpression::presence(stringify!(#variant_name).to_string()),
             #(#serializations),*
         ])
         .minimized()
@@ -148,8 +148,11 @@ fn read_next_field_expecting(expected: &impl ToTokens) -> TokenStream {
     quote! {
         fields
             .next()
-            .ok_or(Error::ExpectedTypeGot(
-                stringify!(#expected).to_string(), "End of input".to_string())
+            .ok_or(
+                Error::at(
+                    ExpectedTypeGot(stringify!(#expected).to_string(), "End of input".to_string()),
+                    expr.location
+                )
             )?
     }
 }
@@ -159,7 +162,7 @@ fn deserialize_struct_like_field(name: &Ident, to: &Type) -> TokenStream {
     let to_deserialize = quote! {
         #next_field
         .get(stringify!(#name))
-        .ok_or(Error::UnableToFindKey(stringify!(#name).to_string()))?
+        .ok_or(Error::at(UnableToFindKey(stringify!(#name).to_string()), expr.location))?
     };
     let deserialized = deserialized(to_deserialize, to);
     quote! {#name: #deserialized}
@@ -214,10 +217,10 @@ fn deserialize_enum(enm: &DataEnum, enum_name: &Ident) -> TokenStream {
         .map(|variant| deserialize_enum_variant(variant, enum_name));
 
     quote! {
-        let specifier = match &expr {
-            Expression::Presence(s) => Some(s.clone()),
-            Expression::Pair(_, _) => None,
-            Expression::Collection(c) => {
+        let specifier = match &expr.data {
+            CstData::Presence(s) => Some(s.clone()),
+            CstData::Pair(_, _) => None,
+            CstData::Collection(c) => {
                 let specifier = c.get(0).map(|x| x.release().map(|x| x.clone())).flatten();
 
                 if specifier.is_some() {
@@ -226,11 +229,11 @@ fn deserialize_enum(enm: &DataEnum, enum_name: &Ident) -> TokenStream {
 
                 specifier
             },
-        }.ok_or(Error::ExpectedTypeGot(stringify!(#enum_name).to_string(), expr.pretty()))?;
+        }.ok_or(Error::at(ExpectedTypeGot(stringify!(#enum_name).to_string(), expr.pretty()), expr.location))?;
 
         match specifier.as_str() {
             #(#variant_serializations)*
-            _ => Err(Error::ExpectedTypeGot(stringify!(#enum_name).to_string(), expr.pretty()))
+            _ => Err(Error::at(ExpectedTypeGot(stringify!(#enum_name).to_string(), expr.pretty()), expr.location))
         }
     }
 }
@@ -260,15 +263,15 @@ fn deserialize_struct(strct: &DataStruct, struct_name: &Ident) -> TokenStream {
         Fields::Unit => quote! {
             let maybe_unit = fields.next();
             if let Some(unit) = &maybe_unit {
-                return match unit {
-                    Expression::Presence(s) => {
+                return match &unit.data {
+                    CstData::Presence(s) => {
                         if s == stringify!(#struct_name) {
                             Ok(#struct_name)
                         } else {
-                            Err(Error::ExpectedTypeGot(stringify!(#struct_name).to_string(), maybe_unit.unwrap().pretty()))
+                            Err(Error::at(ExpectedTypeGot(stringify!(#struct_name).to_string(), unit.pretty()), unit.location))
                         }
                     }
-                    _ => Err(Error::ExpectedTypeGot(stringify!(#struct_name).to_string(), maybe_unit.unwrap().pretty())) ,
+                    _ => Err(Error::at(ExpectedTypeGot(stringify!(#struct_name).to_string(), unit.pretty()), expr.location)) ,
                 }
             }
 
@@ -278,7 +281,7 @@ fn deserialize_struct(strct: &DataStruct, struct_name: &Ident) -> TokenStream {
 }
 
 
-#[proc_macro_derive(Config)]
+#[proc_macro_derive(Config, attributes(Comment))]
 pub fn config(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     // Parse the input TokenStream into a DeriveInput syntax tree
     let ast: DeriveInput = syn::parse(item).unwrap();
@@ -301,20 +304,21 @@ pub fn config(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let gen = quote! {
         impl easy_config::serialization::Config for #name {
-            fn serialize(&self) -> easy_config::expression::Expression {
-                use easy_config::expression::Expression;
+            fn serialize(&self) -> easy_config::expression::CstExpression {
+                use easy_config::expression::{CstExpression, CstData};
                 #serialization
             }
 
-            fn deserialize(expr: easy_config::expression::Expression) -> Result<Self, easy_config::serialization::error::Error> where Self: Sized {
-                use easy_config::expression::Expression;
+            fn deserialize(expr: easy_config::expression::CstExpression) -> Result<Self, easy_config::serialization::error::Error> where Self: Sized {
+                use easy_config::expression::{CstExpression, CstData};
                 use easy_config::serialization::DeserializeExtension;
                 use easy_config::serialization::error::Error;
+                use easy_config::serialization::error::Kind::*;
 
                 let mut fields = expr
                     .clone()
                     .into_deserialization_iterator()
-                    .ok_or(Error::ExpectedTypeGot(stringify!(#name).to_string(), expr.pretty()))?;
+                    .ok_or(Error::at(ExpectedTypeGot(stringify!(#name).to_string(), expr.pretty()), expr.location))?;
 
                 #deserialization
             }

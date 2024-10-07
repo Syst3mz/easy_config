@@ -36,6 +36,7 @@ impl CstExpression {
             comment,
         }
     }
+
     pub fn uncommented(data: CstData, location: Location) -> CstExpression {
         Self::new(data, Some(location), None)
     }
@@ -55,6 +56,11 @@ impl CstExpression {
             None,
             None
         )
+    }
+
+    pub fn with_comment(mut self, comment: String) -> Self {
+        self.comment = Some(comment);
+        self
     }
 
     pub fn uncomented_pretty(&self) -> String {
