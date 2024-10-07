@@ -104,3 +104,5 @@ impl Display for Error {
         }, loc_string)
     }
 }
+
+impl std::error::Error for Error {}

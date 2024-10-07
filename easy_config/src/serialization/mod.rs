@@ -99,4 +99,12 @@ mod tests {
             Demo::deserialize(parsed).unwrap(), demo()
         )
     }
+
+    #[test]
+    fn deserialize_err() {
+        let parsed = Parser::new("(key = cat vec = a = b)").parse_tokens().unwrap();
+        assert_eq!(
+            Demo::deserialize(parsed).unwrap(), demo()
+        )
+    }
 }
