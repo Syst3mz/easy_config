@@ -13,6 +13,7 @@ pub enum Kind {
     ParseFloatError(ParseFloatError),
     UnableToFindKey(String),
     ExpectedTypeGot(String, String),
+    ExpectedTypeIn(String, String, String),
     ParseBoolError(ParseBoolError),
     ParseCharError(ParseCharError),
     WrongNumberOfElements(usize, usize),
@@ -57,8 +58,8 @@ impl From<std::io::Error> for Kind {
 
 #[derive(Debug)]
 pub struct Error {
-    location: Option<Location>,
-    kind: Kind
+    pub location: Option<Location>,
+    pub kind: Kind
 }
 
 impl Error {
@@ -96,6 +97,7 @@ impl Display for Error {
             Kind::ParseFloatError(e) => e.to_string(),
             Kind::UnableToFindKey(k) => k.to_string(),
             Kind::ExpectedTypeGot(t, k) => format!("Expected a `{}` but found: {}.", t, k),
+            Kind::ExpectedTypeIn(t, i, g) => format!("Expected a `{}` in a `{}` did not find it in: {}.", t, i, g),
             Kind::WrongNumberOfElements(g, e) => format!("Wrong number of elements. Expected {} got {}.", e, g),
             Kind::ParseBoolError(e) => e.to_string(),
             Kind::ParseCharError(e) => e.to_string(),

@@ -15,6 +15,7 @@ pub struct Configuration {
 
 #[cfg(test)]
 mod tests {
+    use easy_config::parser::Parser;
     use crate::Kind::{Generated, HandMade};
     use super::*;
     use easy_config::serialization::Config;
@@ -35,5 +36,35 @@ mod tests {
     #[test]
     fn serialize() {
         assert_eq!(demo().serialize().dump(), "(run_name = first names_in_run = ((HandMade Ethan) (HandMade James) (Generated SDKJLHF) (Generated Kerflooble)) count = 2)")
+    }
+
+    #[test]
+    fn good_error_test() {
+        let text = "
+        (
+            run_name = (Error Out)
+	        names_in_run = (
+	        	(
+	        		HandMade
+	        	)
+	        	(
+	        		HandMade
+	        		James
+	        	)
+	        	(
+	        		Generated
+	        		SDKJLHF
+	        	)
+	        	(
+	        		Generated
+	        		Kerflooble
+	        	)
+	        )
+	        count = 2
+	    )
+";
+        let parsed = Parser::parse(text).unwrap();
+        let err = Configuration::deserialize(parsed).unwrap_err();
+        assert_eq!(err.to_string(), "Expected a `alloc::string::String` in a `Configuration` did not find it in: (\n\tHandMade\n). @ (5, 11)")
     }
 }

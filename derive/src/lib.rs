@@ -141,7 +141,7 @@ fn serialize_enum(enm: &DataEnum) -> TokenStream {
 
 
 fn deserialized(item: TokenStream, typ: &Type) -> TokenStream {
-    quote! {<#typ>::deserialize(#item)?}
+    quote! {<#typ>::deserialize(#item)}
 }
 
 fn read_next_field_expecting(expected: &impl ToTokens) -> TokenStream {
@@ -157,26 +157,44 @@ fn read_next_field_expecting(expected: &impl ToTokens) -> TokenStream {
     }
 }
 
-fn deserialize_struct_like_field(name: &Ident, to: &Type) -> TokenStream {
+fn add_owning_information(to: TokenStream, owner: &Ident) -> TokenStream {
+    quote! {
+        #to.map_err(|x| {
+            if let ExpectedTypeGot(ty, at) = x.kind {
+                Error::at(ExpectedTypeIn(ty, stringify!(#owner).to_string(), at), x.location)
+            } else {
+                x
+            }
+        })
+    }
+}
+
+fn deserialize_struct_like_field(name: &Ident, to: &Type, owner: &Ident) -> TokenStream {
     let next_field = read_next_field_expecting(to);
     let to_deserialize = quote! {
         #next_field
         .get(stringify!(#name))
         .ok_or(Error::at(UnableToFindKey(stringify!(#name).to_string()), expr.location))?
     };
-    let deserialized = deserialized(to_deserialize, to);
-    quote! {#name: #deserialized}
+    let deserialized = add_owning_information(deserialized(to_deserialize, to), owner);
+
+    quote! {#name: #deserialized?}
 }
 
-fn deserialize_tuple_like_field(to: &Type) -> TokenStream {
-    deserialized(read_next_field_expecting(to), to)
+fn deserialize_tuple_like_field(to: &Type, owner: &Ident) -> TokenStream {
+    let deserialized = add_owning_information(
+        deserialized(read_next_field_expecting(to), to),
+        owner
+    );
+
+    quote! {#deserialized?}
 }
 
-fn deserialize_field(name: Option<&Ident>, ty: &Type) -> TokenStream {
+fn deserialize_field(name: Option<&Ident>, ty: &Type, owner: &Ident) -> TokenStream {
     if let Some(name) = name {
-        deserialize_struct_like_field(name, ty)
+        deserialize_struct_like_field(name, ty, owner)
     } else {
-        deserialize_tuple_like_field(ty)
+        deserialize_tuple_like_field(ty, owner)
     }
 }
 
@@ -186,7 +204,7 @@ fn deserialize_enum_variant(variant: &Variant, enum_name: &Ident) -> TokenStream
 
     let deserialization = match &variant.fields {
         Fields::Named(n) => {
-            let deserializations = n.named.iter().map(|x| deserialize_struct_like_field(x.ident.as_ref().unwrap(), &x.ty));
+            let deserializations = n.named.iter().map(|x| deserialize_struct_like_field(x.ident.as_ref().unwrap(), &x.ty, variant_name));
             quote! {
                 #enum_name::#variant_name{
                     #(#deserializations),*
@@ -194,7 +212,7 @@ fn deserialize_enum_variant(variant: &Variant, enum_name: &Ident) -> TokenStream
             }
         },
         Fields::Unnamed(u) => {
-            let deserializations = u.unnamed.iter().map(|x| deserialize_tuple_like_field(&x.ty));
+            let deserializations = u.unnamed.iter().map(|x| deserialize_tuple_like_field(&x.ty, variant_name));
             quote! {
                 #enum_name::#variant_name(
                     #(#deserializations),*
@@ -243,7 +261,7 @@ fn deserialize_struct(strct: &DataStruct, struct_name: &Ident) -> TokenStream {
         Fields::Named(n) => {
             let deserializations = n.named
                 .iter()
-                .map(|field| deserialize_field(field.ident.as_ref(), &field.ty));
+                .map(|field| deserialize_field(field.ident.as_ref(), &field.ty, struct_name));
             quote! {
                 Ok(#struct_name {
                     #(#deserializations),*
@@ -253,7 +271,7 @@ fn deserialize_struct(strct: &DataStruct, struct_name: &Ident) -> TokenStream {
         Fields::Unnamed(u) => {
             let deserializations = u.unnamed
                 .iter()
-                .map(|field| deserialize_field(field.ident.as_ref(), &field.ty));
+                .map(|field| deserialize_field(field.ident.as_ref(), &field.ty, struct_name));
             quote! {
                 Ok(#struct_name (
                     #(#deserializations),*
