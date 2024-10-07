@@ -157,7 +157,7 @@ fn read_next_field_expecting(expected: &impl ToTokens) -> TokenStream {
     }
 }
 
-fn add_owning_information(to: TokenStream, owner: &Ident) -> TokenStream {
+fn add_owning_information(to: TokenStream, owner: TokenStream) -> TokenStream {
     quote! {
         #to.map_err(|x| {
             if let ExpectedTypeGot(ty, at) = x.kind {
@@ -169,7 +169,7 @@ fn add_owning_information(to: TokenStream, owner: &Ident) -> TokenStream {
     }
 }
 
-fn deserialize_struct_like_field(name: &Ident, to: &Type, owner: &Ident) -> TokenStream {
+fn deserialize_struct_like_field(name: &Ident, to: &Type, owner: TokenStream) -> TokenStream {
     let next_field = read_next_field_expecting(to);
     let to_deserialize = quote! {
         #next_field
@@ -181,7 +181,7 @@ fn deserialize_struct_like_field(name: &Ident, to: &Type, owner: &Ident) -> Toke
     quote! {#name: #deserialized?}
 }
 
-fn deserialize_tuple_like_field(to: &Type, owner: &Ident) -> TokenStream {
+fn deserialize_tuple_like_field(to: &Type, owner: TokenStream) -> TokenStream {
     let deserialized = add_owning_information(
         deserialized(read_next_field_expecting(to), to),
         owner
@@ -190,7 +190,7 @@ fn deserialize_tuple_like_field(to: &Type, owner: &Ident) -> TokenStream {
     quote! {#deserialized?}
 }
 
-fn deserialize_field(name: Option<&Ident>, ty: &Type, owner: &Ident) -> TokenStream {
+fn deserialize_field(name: Option<&Ident>, ty: &Type, owner: TokenStream) -> TokenStream {
     if let Some(name) = name {
         deserialize_struct_like_field(name, ty, owner)
     } else {
@@ -204,7 +204,8 @@ fn deserialize_enum_variant(variant: &Variant, enum_name: &Ident) -> TokenStream
 
     let deserialization = match &variant.fields {
         Fields::Named(n) => {
-            let deserializations = n.named.iter().map(|x| deserialize_struct_like_field(x.ident.as_ref().unwrap(), &x.ty, variant_name));
+            let deserializations = n.named.iter()
+                .map(|x| deserialize_struct_like_field(x.ident.as_ref().unwrap(), &x.ty, quote! {variant_name}));
             quote! {
                 #enum_name::#variant_name{
                     #(#deserializations),*
@@ -212,7 +213,7 @@ fn deserialize_enum_variant(variant: &Variant, enum_name: &Ident) -> TokenStream
             }
         },
         Fields::Unnamed(u) => {
-            let deserializations = u.unnamed.iter().map(|x| deserialize_tuple_like_field(&x.ty, variant_name));
+            let deserializations = u.unnamed.iter().map(|x| deserialize_tuple_like_field(&x.ty, quote! {variant_name}));
             quote! {
                 #enum_name::#variant_name(
                     #(#deserializations),*
@@ -261,7 +262,11 @@ fn deserialize_struct(strct: &DataStruct, struct_name: &Ident) -> TokenStream {
         Fields::Named(n) => {
             let deserializations = n.named
                 .iter()
-                .map(|field| deserialize_field(field.ident.as_ref(), &field.ty, struct_name));
+                .map(|field| {
+                    let field_name = field.ident.as_ref().unwrap();
+                    let field_type = &field.ty;
+                    deserialize_field(field.ident.as_ref(), field_type, quote! {#struct_name.#field_name<#field_type>})
+                });
             quote! {
                 Ok(#struct_name {
                     #(#deserializations),*
@@ -271,7 +276,7 @@ fn deserialize_struct(strct: &DataStruct, struct_name: &Ident) -> TokenStream {
         Fields::Unnamed(u) => {
             let deserializations = u.unnamed
                 .iter()
-                .map(|field| deserialize_field(field.ident.as_ref(), &field.ty, struct_name));
+                .map(|field| deserialize_field(field.ident.as_ref(), &field.ty, quote! {struct_name}));
             quote! {
                 Ok(#struct_name (
                     #(#deserializations),*

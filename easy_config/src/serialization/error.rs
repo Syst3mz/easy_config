@@ -85,25 +85,25 @@ impl From<std::io::Error> for Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let loc_string = if let Some(loc)  = self.location {
-            format!(" @ ({}, {})", loc.row, loc.column)
+            format!("@ {}, {}: ", loc.row, loc.column)
         } else {
             String::new()
         };
 
-        write!(f, "{}{}", match &self.kind {
+        write!(f, "{}{}", loc_string, match &self.kind {
             Kind::ExpectedPresenceGot(e) => format!("Expected a `Presence` but got: {}", e),
             Kind::ExpectedCollectionGot(e) => format!("Expected a `Collection` but got: {}", e),
             Kind::ParseIntError(e) => e.to_string(),
             Kind::ParseFloatError(e) => e.to_string(),
             Kind::UnableToFindKey(k) => k.to_string(),
             Kind::ExpectedTypeGot(t, k) => format!("Expected a `{}` but found: {}.", t, k),
-            Kind::ExpectedTypeIn(t, i, g) => format!("Expected a `{}` in a `{}` did not find it in: {}.", t, i, g),
+            Kind::ExpectedTypeIn(t, i, g) => format!("Expected a `{}` in a `{}` and did not find it in: {}.", t, i, g),
             Kind::WrongNumberOfElements(g, e) => format!("Wrong number of elements. Expected {} got {}.", e, g),
             Kind::ParseBoolError(e) => e.to_string(),
             Kind::ParseCharError(e) => e.to_string(),
             Kind::ParserError(e) => e.to_string(),
             Kind::IoError(e) => e.to_string()
-        }, loc_string)
+        })
     }
 }
 
