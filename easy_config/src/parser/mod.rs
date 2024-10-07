@@ -1,8 +1,8 @@
-use crate::expression::Expression;
-use crate::expression::Expression::Pair;
+use crate::expression::{CstData, CstExpression};
 use crate::lexer::{Lexer, token};
 use crate::lexer::token::{Kind, Token};
 use crate::lexer::token::Kind::Text;
+use crate::location::Location;
 use crate::parser::parser_error::ParserError;
 
 pub mod parser_error;
@@ -48,24 +48,23 @@ impl Parser {
         }
     }
 
-    fn parse_pair(&mut self) -> Result<Expression, ParserError> {
-        let current_token = self.current().ok_or(ParserError::eoi(&self))?;
-        if current_token.kind() != Text {
-            return Err(ParserError::expected_text(&current_token))
+    fn parse_pair(&mut self) -> Result<CstExpression, ParserError> {
+        let key_token = self.current().ok_or(ParserError::eoi(&self))?;
+        if key_token.kind() != Text {
+            return Err(ParserError::expected_text(&key_token))
         }
         self.advance();
 
-        let token_text = current_token.lexeme().to_string();
+        let key_text = key_token.lexeme().to_string();
 
         if self.eat(Kind::Equals).is_some() {
-
-            Ok(Pair(token_text, Box::new(self.parse_expr()?)))
+            Ok(key_token.to_cst_expr(CstData::Pair(key_text, Box::new(self.parse_expr()?))))
         } else {
-            Ok(Expression::Presence(token_text))
+            Ok(key_token.to_cst_expr(CstData::Presence(key_text)))
         }
     }
 
-    fn parse_collection(&mut self) -> Result<Expression, ParserError> {
+    fn parse_collection(&mut self) -> Result<CstExpression, ParserError> {
         let lparen = self.current().ok_or(ParserError::eoi(&self))?;
 
         if lparen.kind() != Kind::LParen {
@@ -78,10 +77,10 @@ impl Parser {
             collection.push(self.parse_expr()?)
         }
 
-        Ok(Expression::Collection(collection))
+        Ok(lparen.to_cst_expr(CstData::Collection(collection)))
     }
 
-    fn parse_expr(&mut self) -> Result<Expression, ParserError> {
+    fn parse_expr(&mut self) -> Result<CstExpression, ParserError> {
         let current = self.current().ok_or(ParserError::eoi(&self))?;
 
         match current.kind() {
@@ -92,59 +91,89 @@ impl Parser {
         }
     }
 
-    pub fn parse_tokens(&mut self) -> Result<Expression, ParserError> {
+    pub fn parse_tokens(&mut self) -> Result<CstExpression, ParserError> {
         let mut collection = vec![];
         while !self.finished() {
             collection.push(self.parse_expr()?)
         }
 
-        Ok(Expression::Collection(collection).minimized())
+        Ok(CstExpression::new(
+            CstData::Collection(collection),
+            Some(Location {row: 1, column: 1}),
+            None
+        ).minimized())
     }
 
-    pub fn parse(text: impl AsRef<str>) -> Result<Expression, ParserError> {
+    pub fn parse(text: impl AsRef<str>) -> Result<CstExpression, ParserError> {
         Parser::new(text).parse_tokens()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::expression::Expression::{Collection, Presence};
+    use crate::expression::CstData::{Collection, Pair, Presence};
     use super::*;
 
     #[test]
     fn presence() {
         let p = Parser::new("some-key").parse_tokens().unwrap();
-        assert_eq!(p, Presence(String::from("some-key")))
+        assert_eq!(p, CstExpression::uncommented(Presence(String::from("some-key")), Location::new(1, 1)))
     }
 
     #[test]
     fn pair() {
         let p = Parser::new("some-key = value").parse_tokens().unwrap();
-        assert_eq!(p, Pair(String::from("some-key"), Box::new(Presence(String::from("value")))))
+        assert_eq!(p, CstExpression::uncommented(Pair(
+            "some-key".to_string(),
+            Box::new(CstExpression::uncommented(
+                Presence("value".to_string()),
+                Location::new(1, 12)
+            ))
+        ), Location::new(1, 1)))
     }
 
     #[test]
     fn paired_collection() {
         let p = Parser::new("some-key = (a b)").parse_tokens().unwrap();
-        assert_eq!(p, Pair(String::from("some-key"), Box::new(Collection(vec![
-            Presence(String::from("a")),
-            Presence(String::from("b"))
-        ]))))
+        assert_eq!(p, CstExpression::uncommented(
+            Pair("some-key".to_string(), Box::new(CstExpression::uncommented(
+                Collection(vec![
+                    CstExpression::uncommented(Presence("a".to_string()), Location::new(1, 13)),
+                    CstExpression::uncommented(Presence("b".to_string()), Location::new(1, 15))
+                ]),
+                Location::new(1, 12)
+            ))),
+            Location::new(1, 1)
+        ))
     }
 
     #[test]
     fn nesting() {
         let p = Parser::new("some-key = (a = b c)").parse_tokens().unwrap();
-        assert_eq!(p, Pair(String::from("some-key"), Box::new(Collection(vec![
-            Pair(String::from("a"), Box::new(Presence(String::from("b")))),
-            Presence(String::from("c"))
-        ]))))
+        assert_eq!(p, CstExpression::uncommented(
+            Pair("some-key".to_string(), Box::new(CstExpression::uncommented(
+                Collection(vec![
+                    CstExpression::uncommented(
+                        Pair("a".to_string(), Box::new(CstExpression::uncommented(
+                            Presence("b".to_string()),
+                            Location::new(1, 17))
+                        )),
+                        Location::new(1, 13)
+                    ),
+                    CstExpression::uncommented(Presence("c".to_string()), Location::new(1, 19))
+                ]),
+                Location::new(1, 12)))),
+            Location::new(1, 1)
+        ))
     }
 
     #[test]
     fn collection() {
         let p = Parser::new("(a b)").parse_tokens().unwrap();
-        assert_eq!(p, Collection(vec![Presence(String::from("a")), Presence(String::from("b"))]))
+        assert_eq!(p, CstExpression::uncommented(Collection(vec![
+            CstExpression::uncommented(Presence(String::from("a")), Location::new(1, 2)),
+            CstExpression::uncommented(Presence(String::from("b")), Location::new(1, 4)),
+        ]), Location::new(1, 1)))
     }
 
     #[test]

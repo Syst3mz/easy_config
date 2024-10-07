@@ -1,3 +1,6 @@
+use crate::expression::{CstData, CstExpression};
+use crate::location::Location;
+
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Kind {
     LParen,
@@ -35,5 +38,9 @@ impl Token {
     }
     pub fn column(&self) -> usize {
         self.column
+    }
+
+    pub fn to_cst_expr(&self, data: CstData) -> CstExpression {
+        CstExpression::uncommented(data, Location::new(self.row, self.column))
     }
 }

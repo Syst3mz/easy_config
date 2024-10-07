@@ -1,23 +1,24 @@
 use std::any::type_name;
 use std::collections::HashMap;
 use std::hash::Hash;
-use crate::expression::{escape, Expression};
-use crate::expression::Expression::{Collection, Presence};
+use crate::expression::{escape, CstExpression, CstData};
+use crate::expression::CstData::{Collection, Presence};
 use crate::serialization::error::Error;
-use crate::serialization::{Config, DeserializeExtension};
-use crate::serialization::error::Error::{ExpectedCollectionGot, WrongNumberOfElements};
+use crate::serialization::{Config, DeserializationIterator, DeserializeExtension};
+use crate::serialization::error::Kind::{ExpectedCollectionGot, WrongNumberOfElements, ExpectedPresenceGot, ExpectedTypeGot};
+
 
 macro_rules! config {
     ($ty: ty) => {
         impl Config for $ty {
-            fn serialize(&self) -> Expression {
-                Expression::Presence(self.to_string())
+            fn serialize(&self) -> CstExpression {
+                CstExpression::presence(self.to_string())
             }
 
-            fn deserialize(expr: Expression) -> Result<Self, Error> {
-                match expr {
-                    Expression::Presence(p) => Ok(p.parse()?),
-                    _ => Err(Error::ExpectedPresenceGot(expr.pretty()))
+            fn deserialize(expr: CstExpression) -> Result<Self, Error> {
+                match expr.data {
+                    CstData::Presence(p) => Ok(p.parse().map_err(|x| Error::at(x, expr.location))?),
+                    _ => Err(Error::at(ExpectedPresenceGot(expr.pretty()), expr.location))
                 }
             }
         }
@@ -45,22 +46,26 @@ config!(bool);
 config!(char);
 
 
+fn deserialization_iter<T>(expr: CstExpression) -> Result<DeserializationIterator, Error> {
+    let error_if_needed = Error::at(ExpectedTypeGot(type_name::<Vec<T>>().to_string(), expr.pretty()), expr.location);
+    expr
+        .into_deserialization_iterator()
+        .ok_or(error_if_needed)
+}
+
 impl Config for String {
-    fn serialize(&self) -> Expression {
-        Expression::Collection(Vec::from_iter(
-            escape(self).split(|x: char| x.is_whitespace()).filter_map(|x| if !x.is_empty() { Some(Presence(x.to_string())) } else {None})
+    fn serialize(&self) -> CstExpression {
+        CstExpression::collection(Vec::from_iter(
+            escape(self).split(|x: char| x.is_whitespace()).filter_map(|x| if !x.is_empty() { Some(Presence(x.to_string()).into()) } else {None})
         )).minimized()
     }
 
-    fn deserialize(expr: Expression) -> Result<Self, Error> {
-        let words = expr
-            .clone()
-            .into_deserialization_iterator()
-            .ok_or(Error::ExpectedTypeGot(type_name::<String>().to_string(), expr.pretty()))?;
+    fn deserialize(expr: CstExpression) -> Result<Self, Error> {
+        let words = deserialization_iter::<Self>(expr.clone())?;
 
         let mut acc = String::new();
         for word in words {
-            acc += &word.clone().release().ok_or(Error::ExpectedPresenceGot(word.pretty()))?;
+            acc += &word.clone().release().ok_or(Error::at(ExpectedPresenceGot(word.pretty()), word.location))?;
             acc.push(' ');
         }
 
@@ -72,49 +77,40 @@ impl Config for String {
     }
 }
 impl <T: Config, const N: usize > Config for [T; N] {
-    fn serialize(&self) -> Expression {
-        Expression::Collection(Vec::from_iter(self.iter().map(|x| x.serialize())))
+    fn serialize(&self) -> CstExpression {
+        CstExpression::collection(Vec::from_iter(self.iter().map(|x| x.serialize())))
     }
 
-    fn deserialize(expr: Expression) -> Result<Self, Error> {
-        let elements = expr
-            .clone()
-            .into_deserialization_iterator()
-            .ok_or(Error::ExpectedTypeGot(type_name::<Vec<T>>().to_string(), expr.pretty()))?;
+    fn deserialize(expr: CstExpression) -> Result<Self, Error> {
+        let elements = deserialization_iter::<Self>(expr.clone())?;
 
         let maybe_good_size_store: Vec<T> = Result::from_iter(elements.map(|x| T::deserialize(x)))?;
-        Ok(maybe_good_size_store.try_into().map_err(|x: Vec<T>| WrongNumberOfElements(x.len(), N))?)
+        Ok(maybe_good_size_store.try_into().map_err(|x: Vec<T>| Error::at(WrongNumberOfElements(x.len(), N), expr.location))?)
     }
 }
 impl<T: Config> Config for Vec<T> {
-    fn serialize(&self) -> Expression {
-        Expression::Collection(Vec::from_iter(self.iter().map(|x| x.serialize())))
+    fn serialize(&self) -> CstExpression {
+        CstExpression::collection(Vec::from_iter(self.iter().map(|x| x.serialize())))
     }
 
-    fn deserialize(expr: Expression) -> Result<Self, Error>
+    fn deserialize(expr: CstExpression) -> Result<Self, Error>
     where
         Self: Sized
     {
-        let elements = expr
-            .clone()
-            .into_deserialization_iterator()
-            .ok_or(Error::ExpectedTypeGot(type_name::<Vec<T>>().to_string(), expr.pretty()))?;
+        let elements = deserialization_iter::<Self>(expr.clone())?;
 
         Ok(Result::from_iter(elements.map(|x| T::deserialize(x)))?)
     }
 }
 impl<K: Clone+Config+Hash+Eq, V: Clone+Config> Config for HashMap<K, V> {
-    fn serialize(&self) -> Expression {
-        Expression::Collection(Vec::from_iter(
+    fn serialize(&self) -> CstExpression {
+        CstExpression::collection(Vec::from_iter(
             self.iter().map(|(k, v)| (k.clone(), v.clone()).serialize())
         ))
     }
 
-    fn deserialize(expr: Expression) -> Result<Self, Error> {
-        let kv_pairs = expr
-            .clone()
-            .into_deserialization_iterator()
-            .ok_or(Error::ExpectedCollectionGot(expr.pretty()))?;
+    fn deserialize(expr: CstExpression) -> Result<Self, Error> {
+        let kv_pairs = deserialization_iter::<Self>(expr.clone())?;
 
         let mut hm = HashMap::new();
         for kv_pair in kv_pairs {
@@ -125,30 +121,30 @@ impl<K: Clone+Config+Hash+Eq, V: Clone+Config> Config for HashMap<K, V> {
     }
 }
 impl<T: Config> Config for Box<T> {
-    fn serialize(&self) -> Expression {
+    fn serialize(&self) -> CstExpression {
         T::serialize(self)
     }
 
-    fn deserialize(expr: Expression) -> Result<Self, Error> {
+    fn deserialize(expr: CstExpression) -> Result<Self, Error> {
         Ok(Box::new(T::deserialize(expr)?))
     }
 }
 
 impl Config for () {
-    fn serialize(&self) -> Expression {
-        Expression::Collection(vec![])
+    fn serialize(&self) -> CstExpression {
+        CstExpression::collection(vec![])
     }
 
-    fn deserialize(expr: Expression) -> Result<Self, Error>
+    fn deserialize(expr: CstExpression) -> Result<Self, Error>
     where
         Self: Sized
     {
-        match expr {
-            Presence(_) => Err(ExpectedCollectionGot(expr.pretty())),
-            Expression::Pair(_, _) => Err(ExpectedCollectionGot(expr.pretty())),
-            Expression::Collection(c) => {
+        match &expr.data {
+            Presence(_) => Err(Error::at(ExpectedCollectionGot(expr.pretty()), expr.location)),
+            CstData::Pair(_, _) => Err(Error::at(ExpectedCollectionGot(expr.pretty()), expr.location)),
+            CstData::Collection(c) => {
                 if !c.is_empty() {
-                    Err(WrongNumberOfElements(0, c.len()))
+                    Err(Error::at(WrongNumberOfElements(0, c.len()), expr.location))
                 } else {
                     Ok(())
                 }
@@ -159,25 +155,20 @@ impl Config for () {
 
 
 impl<T: Config> Config for Option<T> {
-    fn serialize(&self) -> Expression {
+    fn serialize(&self) -> CstExpression {
         match self {
-            None => Presence(String::from("None")),
-            Some(t) => Collection(vec![Presence(String::from("Some")), t.serialize()])
+            None => CstExpression::presence(String::from("None")),
+            Some(t) => CstExpression::collection(vec![CstExpression::presence(String::from("Some")), t.serialize()])
         }
     }
 
-    fn deserialize(expr: Expression) -> Result<Self, Error>
+    fn deserialize(expr: CstExpression) -> Result<Self, Error>
     where
         Self: Sized
     {
-        let mut fields = expr
-            .clone()
-            .into_deserialization_iterator()
-            .ok_or(Error::ExpectedTypeGot(
-                format!("Option<{}>", type_name::<T>()), expr.pretty()
-            ))?;
+        let mut fields = deserialization_iter::<Self>(expr.clone())?;
 
-        let specifier = match &expr {
+        let specifier = match &expr.data {
             Presence(s) => Some(s.clone()),
             Collection(c) => {
                 let specifier = c.get(0).map(|x| x.release().map(|x| x.clone())).flatten();
@@ -189,12 +180,12 @@ impl<T: Config> Config for Option<T> {
                 specifier
             },
             _ => None
-        }.ok_or(Error::ExpectedTypeGot(type_name::<T>().to_string(), expr.pretty()))?;
+        }.ok_or(Error::at(ExpectedTypeGot(type_name::<T>().to_string(), expr.pretty()), expr.location))?;
 
         match specifier.as_str() {
-            "Some" => Ok(Some(T::deserialize(fields.next().ok_or(Error::ExpectedTypeGot(type_name::<T>().to_string(), expr.pretty()))?)?)),
+            "Some" => Ok(Some(T::deserialize(fields.next().ok_or(Error::at(ExpectedTypeGot(type_name::<T>().to_string(), expr.pretty()), expr.location))?)?)),
             "None" => Ok(None),
-            _ => Err(Error::ExpectedTypeGot(type_name::<T>().to_string(), expr.pretty()))
+            _ => Err(Error::at(ExpectedTypeGot(type_name::<T>().to_string(), expr.pretty()), expr.location))
         }
     }
 }

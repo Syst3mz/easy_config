@@ -1,18 +1,19 @@
 use std::any::type_name;
 use crate::serialization::{Config, DeserializeExtension};
 use crate::serialization::error::Error;
-use crate::serialization::error::Error::{ExpectedCollectionGot, ExpectedTypeGot};
-use crate::serialization::Expression;
+use crate::serialization::CstExpression;
+use crate::serialization::error::Kind::ExpectedCollectionGot;
+use crate::serialization::error::Kind::ExpectedTypeGot;
 
 macro_rules! impl_tuple {
     ($($typ: ident),*) => {
         impl< $( $typ: Config ),* > Config for ( $($typ),* ) {
             #[allow(non_snake_case)]
-            fn serialize(&self) -> Expression {
+            fn serialize(&self) -> CstExpression {
                 let ($(ref $typ),*) = *self;  // Destructure the tuple
 
                 // Collect serialized elements into a vector
-                Expression::Collection(vec![
+                CstExpression::collection(vec![
                     $(
                         $typ.serialize()  // Call serialize on each element
                     ),*
@@ -20,17 +21,20 @@ macro_rules! impl_tuple {
             }
 
 
-            fn deserialize(expr: Expression) -> Result<Self, Error>
+            fn deserialize(expr: CstExpression) -> Result<Self, Error>
             where
                 Self: Sized
             {
                 let pretty = expr.pretty();
+                let location = expr.location;
+
+
                 let mut x = expr.into_deserialization_iterator()
-                    .ok_or(ExpectedCollectionGot(pretty.clone()))?;
+                    .ok_or(Error::at(ExpectedCollectionGot(pretty.clone()), location))?;
                 Ok((
                     $(
                         $typ::deserialize(x.next()
-                            .ok_or(ExpectedTypeGot(type_name::<$typ>().to_string(), pretty.clone()))?)?
+                            .ok_or(Error::at(ExpectedTypeGot(type_name::<$typ>().to_string(), pretty.clone()), location))?)?
                     ),*
                 ))
             }

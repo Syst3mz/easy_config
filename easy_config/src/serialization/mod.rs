@@ -3,13 +3,14 @@ pub mod error;
 mod tuples;
 
 use std::path::Path;
-use crate::expression::Expression;
+use crate::expression::{CstData, CstExpression};
 use crate::parser::Parser;
 use crate::serialization::error::Error;
+use crate::serialization::error::Kind::UnableToFindKey;
 
 pub trait Config: 'static {
-    fn serialize(&self) -> Expression;
-    fn deserialize(expr: Expression) -> Result<Self, Error> where Self: Sized;
+    fn serialize(&self) -> CstExpression;
+    fn deserialize(expr: CstExpression) -> Result<Self, Error> where Self: Sized;
 }
 
 pub trait DefaultConfig: Config + Default {
@@ -26,24 +27,24 @@ pub trait DefaultConfig: Config + Default {
 impl<T: Default + Config> DefaultConfig for T {}
 
 
-type DeserializationIterator = std::vec::IntoIter<Expression>;
+type DeserializationIterator = std::vec::IntoIter<CstExpression>;
 
 pub trait DeserializeExtension {
-    fn deserialize_get(&self, key: impl AsRef<str>) -> Result<Expression, Error>;
+    fn deserialize_get(&self, key: impl AsRef<str>) -> Result<CstExpression, Error>;
     fn into_deserialization_iterator(self) -> Option<DeserializationIterator>;
 }
 
-impl DeserializeExtension for Expression {
-    fn deserialize_get(&self, key: impl AsRef<str>) -> Result<Expression, Error> {
+impl DeserializeExtension for CstExpression {
+    fn deserialize_get(&self, key: impl AsRef<str>) -> Result<CstExpression, Error> {
         let key = key.as_ref();
-        self.get(key).ok_or(Error::UnableToFindKey(format!("Unable to find key \"{}\"", key)))
+        self.get(key).ok_or(Error::at(UnableToFindKey(format!("Unable to find key \"{}\"", key)), self.location))
     }
 
     fn into_deserialization_iterator(self) -> Option<DeserializationIterator> {
-        match self {
-            Expression::Presence(_) => Some(vec![self].into_iter()),
-            Expression::Pair(_, _) => None,
-            Expression::Collection(c) => Some(c.into_iter())
+        match self.data {
+            CstData::Presence(_) => Some(vec![self].into_iter()),
+            CstData::Pair(_, _) => None,
+            CstData::Collection(c) => Some(c.into_iter())
         }
     }
 }
@@ -62,14 +63,14 @@ mod tests {
     }
 
     impl Config for Demo {
-        fn serialize(&self) -> Expression {
-            Expression::Collection(vec![
-                Expression::Pair("key".to_string(), Box::new(self.key.serialize())),
-                Expression::Pair("vec".to_string(), Box::new(self.vec.serialize()))
+        fn serialize(&self) -> CstExpression {
+            CstExpression::collection(vec![
+                CstExpression::pair("key".to_string(), self.key.serialize()),
+                CstExpression::pair("vec".to_string(), self.vec.serialize())
             ])
         }
 
-        fn deserialize(expr: Expression) -> Result<Self, Error> {
+        fn deserialize(expr: CstExpression) -> Result<Self, Error> {
             Ok(Self {
                 key: String::deserialize(expr.deserialize_get("key")?)?,
                 vec: Vec::<String>::deserialize(expr.deserialize_get("vec")?)?
