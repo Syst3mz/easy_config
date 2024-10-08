@@ -52,8 +52,7 @@ impl DeserializeExtension for CstExpression {
 
     fn into_deserialization_iterator(self) -> Option<DeserializationIterator> {
         match self.data {
-            CstData::Presence(_) => Some(vec![self].into_iter()),
-            CstData::Pair(_, _) => None,
+            CstData::Presence(_) | CstData::Pair(_, _) => Some(vec![self].into_iter()),
             CstData::Collection(c) => Some(c.into_iter())
         }
     }

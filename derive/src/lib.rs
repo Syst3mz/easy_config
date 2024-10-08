@@ -3,33 +3,62 @@ extern crate proc_macro;
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
-use syn::{Data, DataEnum, DataStruct, DeriveInput, Field, Fields, Index, Type, Variant};
+use syn::{Data, DataEnum, DataStruct, DeriveInput, Expr, Field, Fields, Index, Lit, Meta, Type, Variant};
 
 fn serialized(item: TokenStream) -> TokenStream {
     quote! {#item.serialize()}
 }
-fn serialize_named(name: &Ident, variable_accessor: TokenStream) -> TokenStream {
-    let serialized_accessor = serialized(variable_accessor);
-    quote! {
-        CstExpression::pair(String::from(stringify!(#name)), #serialized_accessor)
+
+fn comment_expr(expr: TokenStream, comment: Option<String>) -> TokenStream {
+    if let Some(comment) = comment{
+        return quote! {#expr.with_comment(#comment.to_string())};
     }
+
+    expr
 }
-fn serialize_unnamed(variable_accessor: TokenStream) -> TokenStream {
-    serialized(variable_accessor)
+fn serialize_named(name: &Ident, variable_accessor: TokenStream, comment: Option<String>) -> TokenStream {
+    let serialized_accessor = serialized(variable_accessor);
+    comment_expr(
+        quote! {
+            CstExpression::pair(String::from(stringify!(#name)), #serialized_accessor)
+        },
+        comment
+    )
+}
+fn serialize_unnamed(variable_accessor: TokenStream, comment: Option<String>) -> TokenStream {
+    comment_expr(serialized(variable_accessor), comment)
 }
 
-fn serialize_self_field(ident: &Option<Ident>, index: Index) -> TokenStream {
+fn serialize_self_field(ident: &Option<Ident>, index: Index, comment: Option<String>) -> TokenStream {
     if let Some(ident) = ident {
-        serialize_named(ident, quote! {self.#ident})
+        serialize_named(ident, quote! {self.#ident}, comment)
     } else {
-        serialize_unnamed(quote! {self.#index})
+        serialize_unnamed(quote! {self.#index}, comment)
     }
+}
+
+fn extract_comment_if_exists(field: &Field) -> Option<String> {
+    for attr in &field.attrs {
+        if !attr.path().is_ident("EasyConfig") {
+            continue;
+        }
+
+        if let Ok(Meta::NameValue(ref name_value)) = attr.parse_args() {
+            if let Expr::Lit(l) = &name_value.value {
+                if let Lit::Str(text) = &l.lit {
+                    return Some(text.value())
+                }
+            }
+        }
+    }
+
+    return None;
 }
 
 fn serialize_struct(strct: &DataStruct, struct_name: &Ident) -> TokenStream {
     let serializations = strct.fields.iter()
         .enumerate()
-        .map(|(index, field)| serialize_self_field(&field.ident, Index::from(index)));
+        .map(|(index, field)| serialize_self_field(&field.ident, Index::from(index), extract_comment_if_exists(field)));
 
     match strct.fields {
         Fields::Unit => quote! {
@@ -60,10 +89,11 @@ fn serialize_variant(variant: &Variant) -> TokenStream {
             if field.ident.is_some() {
                 serialize_named(
                     &name,
-                    quote! {#name}
+                    quote! {#name},
+                    extract_comment_if_exists(field)
                 )
             } else {
-                serialize_unnamed(quote! {#name})
+                serialize_unnamed(quote! {#name}, extract_comment_if_exists(field))
             }
         });
 
@@ -304,7 +334,7 @@ fn deserialize_struct(strct: &DataStruct, struct_name: &Ident) -> TokenStream {
 }
 
 
-#[proc_macro_derive(Config, attributes(Comment))]
+#[proc_macro_derive(Config, attributes(EasyConfig))]
 pub fn config(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     // Parse the input TokenStream into a DeriveInput syntax tree
     let ast: DeriveInput = syn::parse(item).unwrap();

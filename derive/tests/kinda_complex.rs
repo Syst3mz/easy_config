@@ -38,6 +38,7 @@ mod tests {
         assert_eq!(demo().serialize().dump(), "(run_name = first names_in_run = ((HandMade Ethan) (HandMade James) (Generated SDKJLHF) (Generated Kerflooble)) count = 2)")
     }
 
+    #[should_panic]
     #[test]
     fn good_error_test() {
         let text = "
