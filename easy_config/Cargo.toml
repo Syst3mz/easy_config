@@ -1,0 +1,18 @@
+[package]
+name = "easy_config"
+version = "0.3.6"
+edition = "2021"
+
+license = "GPL-3.0"
+description = "A language, parser, and lexer designed to make easy to read and write configuration files."
+homepage = "https://github.com/Syst3mz/easy_config"
+repository = "https://github.com/Syst3mz/easy_config"
+readme = "../README.md"
+categories = ["config"]
+keywords = ["config"]
+
+[dependencies]
+easy_config_derive = {path = "../derive", optional = true, version = "0.2.0"}
+
+[features]
+derive = ["dep:easy_config_derive"]

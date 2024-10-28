@@ -1,13 +1,6 @@
-[package]
-name = "easy_config"
-version = "0.1.2"
-edition = "2021"
-license = "GPL-3.0"
-description = "A language, parser, and lexer designed to make easy to read and write configuration files."
-homepage = "https://github.com/Syst3mz/easy_config"
-repository = "https://github.com/Syst3mz/easy_config"
-readme = "README.md"
-categories = ["config"]
-keywords = ["config"]
+[workspace]
+members = ["easy_config", "derive"]
+resolver = "2"
 
-[dependencies]
+[patch.crates-io]
+easy_config = { path = "easy_config" }
