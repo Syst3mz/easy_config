@@ -306,7 +306,7 @@ fn deserialize_struct(strct: &DataStruct, struct_name: &Ident) -> TokenStream {
         Fields::Unnamed(u) => {
             let deserializations = u.unnamed
                 .iter()
-                .map(|field| deserialize_field(field.ident.as_ref(), &field.ty, quote! {struct_name}));
+                .map(|field| deserialize_field(field.ident.as_ref(), &field.ty, quote! {#struct_name}));
             quote! {
                 Ok(#struct_name (
                     #(#deserializations),*

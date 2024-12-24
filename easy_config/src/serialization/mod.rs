@@ -19,7 +19,13 @@ pub enum LoadMode {
     Default
 }
 
+/// Any structure implementing both `Default` and `Config` automatically implements this trait.
 pub trait DefaultConfig: Config + Default {
+    /// This function always returns a config (if successful).
+    /// If a configuration file is both present (at the specified path) and valid
+    /// (can be interpreted without error), then that configuration is returned. If the config is
+    /// not present, then a new file is generated at `path` and the default config is stored in it.
+    /// If a config is invalid this function will return an error.
     fn deserialize_from_file_or_default_and_write(path: impl AsRef<Path>) -> Result<(Self, LoadMode), Error> where Self: Sized {
         let path = path.as_ref();
         if std::fs::exists(path)? {

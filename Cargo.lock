@@ -4,14 +4,14 @@ version = 3
 
 [[package]]
 name = "easy_config"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "easy_config_derive",
 ]
 
 [[package]]
 name = "easy_config_derive"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "easy_config",
  "proc-macro2",

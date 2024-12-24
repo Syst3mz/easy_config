@@ -2,5 +2,4 @@
 members = ["easy_config", "derive"]
 resolver = "2"
 
-[patch.crates-io]
-easy_config = { path = "easy_config" }
+default-members = ["easy_config", "derive"]
