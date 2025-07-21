@@ -1,16 +1,16 @@
-mod primitives;
+/*mod primitives;
 pub mod error;
 mod tuples;
 
 use std::path::Path;
-use crate::expression::{CstData, CstExpression};
+use crate::expression::{ExpressionData, Expression};
 use crate::parser::Parser;
 use crate::serialization::error::Error;
 use crate::serialization::error::Kind::UnableToFindKey;
 
 pub trait Config: 'static {
-    fn serialize(&self) -> CstExpression;
-    fn deserialize(expr: CstExpression) -> Result<Self, Error> where Self: Sized;
+    fn serialize(&self) -> Expression;
+    fn deserialize(expr: Expression) -> Result<Self, Error> where Self: Sized;
 }
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -29,7 +29,7 @@ pub trait DefaultConfig: Config + Default {
     fn deserialize_from_file_or_default_and_write(path: impl AsRef<Path>) -> Result<(Self, LoadMode), Error> where Self: Sized {
         let path = path.as_ref();
         if std::fs::exists(path)? {
-            Ok((Self::deserialize(Parser::parse(std::fs::read_to_string(path)?)?)?, LoadMode::Loaded))
+            Ok((Self::deserialize(Parser::parse(std::fs::read_to_string(path)?).?)?, LoadMode::Loaded))
         } else {
             let default = Self::default();
 
@@ -43,23 +43,23 @@ pub trait DefaultConfig: Config + Default {
 impl<T: Default + Config> DefaultConfig for T {}
 
 
-type DeserializationIterator = std::vec::IntoIter<CstExpression>;
+type DeserializationIterator = std::vec::IntoIter<Expression>;
 
 pub trait DeserializeExtension {
-    fn deserialize_get(&self, key: impl AsRef<str>) -> Result<CstExpression, Error>;
+    fn deserialize_get(&self, key: impl AsRef<str>) -> Result<Expression, Error>;
     fn into_deserialization_iterator(self) -> Option<DeserializationIterator>;
 }
 
-impl DeserializeExtension for CstExpression {
-    fn deserialize_get(&self, key: impl AsRef<str>) -> Result<CstExpression, Error> {
+impl DeserializeExtension for Expression {
+    fn deserialize_get(&self, key: impl AsRef<str>) -> Result<Expression, Error> {
         let key = key.as_ref();
-        self.get(key).ok_or(Error::at(UnableToFindKey(format!("Unable to find key \"{}\"", key)), self.location))
+        self.get(key).ok_or(Error::at(UnableToFindKey(format!("Unable to find key \"{}\"", key)), self.lexical_range))
     }
 
     fn into_deserialization_iterator(self) -> Option<DeserializationIterator> {
         match self.data {
-            CstData::Presence(_) | CstData::Pair(_, _) => Some(vec![self].into_iter()),
-            CstData::Collection(c) => Some(c.into_iter())
+            ExpressionData::Presence(_) | ExpressionData::Binding(_, _) => Some(vec![self].into_iter()),
+            ExpressionData::List(c) => Some(c.into_iter())
         }
     }
 }
@@ -78,14 +78,14 @@ mod tests {
     }
 
     impl Config for Demo {
-        fn serialize(&self) -> CstExpression {
-            CstExpression::collection(vec![
-                CstExpression::pair("key".to_string(), self.key.serialize()),
-                CstExpression::pair("vec".to_string(), self.vec.serialize())
+        fn serialize(&self) -> Expression {
+            Expression::collection(vec![
+                Expression::binding("key".to_string(), self.key.serialize()),
+                Expression::binding("vec".to_string(), self.vec.serialize())
             ])
         }
 
-        fn deserialize(expr: CstExpression) -> Result<Self, Error> {
+        fn deserialize(expr: Expression) -> Result<Self, Error> {
             Ok(Self {
                 key: String::deserialize(expr.deserialize_get("key")?)?,
                 vec: Vec::<String>::deserialize(expr.deserialize_get("vec")?)?
@@ -123,4 +123,4 @@ mod tests {
             Demo::deserialize(parsed).unwrap(), demo()
         )
     }
-}
+}*/

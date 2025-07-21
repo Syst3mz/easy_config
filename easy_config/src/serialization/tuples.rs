@@ -1,7 +1,7 @@
 use std::any::type_name;
 use crate::serialization::{Config, DeserializeExtension};
 use crate::serialization::error::Error;
-use crate::serialization::CstExpression;
+use crate::serialization::Expression;
 use crate::serialization::error::Kind::ExpectedCollectionGot;
 use crate::serialization::error::Kind::ExpectedTypeGot;
 
@@ -9,11 +9,11 @@ macro_rules! impl_tuple {
     ($($typ: ident),*) => {
         impl< $( $typ: Config ),* > Config for ( $($typ),* ) {
             #[allow(non_snake_case)]
-            fn serialize(&self) -> CstExpression {
+            fn serialize(&self) -> Expression {
                 let ($(ref $typ),*) = *self;  // Destructure the tuple
 
                 // Collect serialized elements into a vector
-                CstExpression::collection(vec![
+                Expression::collection(vec![
                     $(
                         $typ.serialize()  // Call serialize on each element
                     ),*
@@ -21,12 +21,12 @@ macro_rules! impl_tuple {
             }
 
 
-            fn deserialize(expr: CstExpression) -> Result<Self, Error>
+            fn deserialize(expr: Expression) -> Result<Self, Error>
             where
                 Self: Sized
             {
                 let pretty = expr.pretty();
-                let location = expr.location;
+                let location = expr.lexical_range;
 
 
                 let mut x = expr.into_deserialization_iterator()

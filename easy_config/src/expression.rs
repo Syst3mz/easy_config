@@ -1,17 +1,75 @@
-use crate::expression::CstData::{Collection, Pair, Presence};
-use crate::location::Location;
+use std::fmt::Display;
+use crate::expression::ExpressionData::{List, Binding, Presence};
+use crate::lexical_range::LexicalSpan;
+
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub enum Atom {
+    Text(String),
+    Number(String),
+}
+
+impl Atom {
+    pub fn is_text(&self) -> bool {
+        matches!(self, Self::Text(_))
+    }
+}
+
+impl Display for Atom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Atom::Text(s) | Atom::Number(s) => s
+        })
+    }
+}
+impl From<String> for Atom {
+    fn from(s: String) -> Self {
+        Atom::Text(s)
+    }
+}
+impl From<&str> for Atom {
+    fn from(s: &str) -> Self {
+        Atom::Text(s.to_string())
+    }
+}
+
+macro_rules! numeric_into_atom {
+    ($ty:ty) => {
+        impl From<$ty> for Atom {
+            fn from(value: $ty) -> Atom {
+                Atom::Number(value.to_string())
+            }
+        }
+    };
+}
+
+numeric_into_atom!(u8);
+numeric_into_atom!(u16);
+numeric_into_atom!(u32);
+numeric_into_atom!(u64);
+numeric_into_atom!(u128);
+numeric_into_atom!(usize);
+
+numeric_into_atom!(i8);
+numeric_into_atom!(i16);
+numeric_into_atom!(i32);
+numeric_into_atom!(i64);
+numeric_into_atom!(i128);
+numeric_into_atom!(isize);
+
+numeric_into_atom!(f32);
+numeric_into_atom!(f64);
 
 #[derive(Debug, Clone,Ord, PartialOrd, Eq, PartialEq)]
-pub enum CstData {
-    Presence(String),
-    Pair(String, Box<CstExpression>),
-    Collection(Vec<CstExpression>)
+pub enum ExpressionData {
+    Presence(Atom),
+    Binding(String, Box<Expression>),
+    List(Vec<Expression>)
 }
 
 #[derive(Debug, Clone,Ord, PartialOrd, Eq, PartialEq)]
-pub struct CstExpression {
-    pub data: CstData,
-    pub location: Option<Location>,
+pub struct Expression {
+    pub data: ExpressionData,
+    pub lexical_range: Option<LexicalSpan>,
     pub comment: Option<String>
 }
 
@@ -28,31 +86,31 @@ pub fn escape(message: impl AsRef<str>) -> String {
         .replace("#", r"\#")
 }
 
-impl CstExpression {
-    pub fn new(data: CstData, location: Option<Location>, comment: Option<String>) -> Self {
+impl Expression {
+    pub fn new(data: ExpressionData, location: Option<LexicalSpan>, comment: Option<String>) -> Self {
         Self {
             data,
-            location,
+            lexical_range: location,
             comment,
         }
     }
 
-    pub fn uncommented(data: CstData, location: Location) -> CstExpression {
+    pub fn uncommented(data: ExpressionData, location: LexicalSpan) -> Expression {
         Self::new(data, Some(location), None)
     }
-    pub fn unlocated(data: CstData, comment: String) -> Self {
+    pub fn unlocated(data: ExpressionData, comment: String) -> Self {
         Self::new(data, None, Some(comment))
     }
 
-    pub fn presence(value: String) -> Self {
-        Self::new(CstData::Presence(value), None, None)
+    pub fn presence(value: impl Into<Atom>) -> Self {
+        Self::new(Presence(value.into()), None, None)
     }
-    pub fn pair(key: String, value: CstExpression) -> Self {
-        Self::new(CstData::Pair(key, Box::new(value)), None, None)
+    pub fn binding(key: String, value: Expression) -> Self {
+        Self::new(Binding(key, Box::new(value)), None, None)
     }
-    pub fn collection(vec: Vec<CstExpression>) -> Self {
+    pub fn collection(vec: Vec<Expression>) -> Self {
         Self::new(
-            CstData::Collection(vec),
+            List(vec),
             None,
             None
         )
@@ -65,9 +123,9 @@ impl CstExpression {
 
     pub fn uncomented_pretty(&self) -> String {
         match &self.data {
-            Presence(s) => s.clone(),
-            Pair(s, e) => format!("{} = {}", s, e.pretty()),
-            Collection(c) => format!(
+            Presence(s) => s.to_string(),
+            Binding(s, e) => format!("{} = {}", s, e.pretty()),
+            List(c) => format!(
                 "(\n{}\n)",
                 indent(c.iter().map(|x| x.pretty()).collect::<Vec<String>>().join("\n"), "\t")
             )
@@ -83,9 +141,9 @@ impl CstExpression {
 
     pub fn uncomented_dump(&self) -> String {
         match &self.data {
-            Presence(s) => s.clone(),
-            Pair(s, e) => format!("{} = {}", s, e.dump()),
-            Collection(c) => format!("({})", c.iter().map(|x| x.dump()).collect::<Vec<String>>().join(" "))
+            Presence(s) => s.to_string(),
+            Binding(s, e) => format!("{} = {}", s, e.dump()),
+            List(c) => format!("({})", c.iter().map(|x| x.dump()).collect::<Vec<String>>().join(" "))
         }
     }
     pub fn dump(&self) -> String {
@@ -99,7 +157,7 @@ impl CstExpression {
     /// Convert this Expression to the smallest form which holds it. I.E. `Collection`s with 1 element
     /// are replaced with that element, removing the collection.
     pub fn minimized(mut self) -> Self {
-        if let Collection(ref mut c) = &mut self.data {
+        if let List(ref mut c) = &mut self.data {
             if c.len() != 1 {
                 return self;
             }
@@ -111,18 +169,18 @@ impl CstExpression {
     }
 
     /// Get a value by key if it exists.
-    pub fn get(&self, key: impl AsRef<str>) -> Option<CstExpression> {
+    pub fn get(&self, key: impl AsRef<str>) -> Option<Expression> {
         let key = key.as_ref();
         match &self.data {
             Presence(_) => Some(self.clone()),
-            Pair(k, v) => {
+            Binding(k, v) => {
                 if key == k {
                     Some(*v.clone())
                 } else {
                     None
                 }
             }
-            Collection(c) => {
+            List(c) => {
                 for e in c {
                     if let Some(e) = e.get(key) {
                         return Some(e);
@@ -135,11 +193,11 @@ impl CstExpression {
     }
 
     /// Return the value stored in an `Expression` as a `&String` IFF it is a singular value.
-    pub fn release(&self) -> Option<&String> {
+    pub fn release(&self) -> Option<&Atom> {
         match &self.data {
             Presence(p) => Some(p),
-            Pair(_, v) => v.release(),
-            Collection(_) => None
+            Binding(_, v) => v.release(),
+            List(_) => None
         }
     }
 
@@ -149,8 +207,8 @@ impl CstExpression {
     }
 }
 
-impl From<CstData> for CstExpression {
-    fn from(value: CstData) -> Self {
+impl From<ExpressionData> for Expression {
+    fn from(value: ExpressionData) -> Self {
         Self::new(value, None, None)
     }
 }
@@ -159,16 +217,16 @@ impl From<CstData> for CstExpression {
 mod tests {
     use super::*;
 
-    fn nested() -> CstExpression {
-        CstExpression::pair(String::from("alphabet"), CstExpression::collection(vec![
-            CstExpression::presence(String::from("a")),
-            CstExpression::presence(String::from("b")),
-            CstExpression::presence(String::from("c")),
+    fn nested() -> Expression {
+        Expression::binding(String::from("alphabet"), Expression::collection(vec![
+            Expression::presence(String::from("a")),
+            Expression::presence(String::from("b")),
+            Expression::presence(String::from("c")),
         ]))
     }
 
-    fn more_nested() -> CstExpression {
-        CstExpression::pair(String::from("alphabet"), CstExpression::collection(vec![
+    fn more_nested() -> Expression {
+        Expression::binding(String::from("alphabet"), Expression::collection(vec![
             nested(),
             nested(),
         ]))
@@ -188,35 +246,35 @@ mod tests {
         assert_eq!(more_nested().pretty(), String::from("alphabet = (\n\talphabet = (\n\t\ta\n\t\tb\n\t\tc\n\t)\n\talphabet = (\n\t\ta\n\t\tb\n\t\tc\n\t)\n)"))
     }
 
-    fn get_demo_expr() -> CstExpression {
-        CstExpression::collection(vec![
-            CstExpression::pair("key".to_string(), CstExpression::presence("cat".to_string())),
-            CstExpression::pair("vec".to_string(), CstExpression::collection(vec![
-                CstExpression::presence("bird".to_string()),
-                CstExpression::presence("dog".to_string()),
+    fn get_demo_expr() -> Expression {
+        Expression::collection(vec![
+            Expression::binding("key".to_string(), Expression::presence("cat".to_string())),
+            Expression::binding("vec".to_string(), Expression::collection(vec![
+                Expression::presence("bird".to_string()),
+                Expression::presence("dog".to_string()),
             ])),
         ])
     }
     #[test]
     fn get() {
         let gotten = get_demo_expr().get("vec").unwrap();
-        assert_eq!(gotten, CstExpression::collection(vec![
-            CstExpression::presence("bird".to_string()),
-            CstExpression::presence("dog".to_string()),
+        assert_eq!(gotten, Expression::collection(vec![
+            Expression::presence("bird".to_string()),
+            Expression::presence("dog".to_string()),
         ]))
     }
 
     #[test]
     fn pretty_harder() {
-        let make_pretty = CstExpression::collection(vec![
-            CstExpression::pair("run_name".to_string(), CstExpression::presence("first".to_string())),
-            CstExpression::pair("names_in_run".to_string(), CstExpression::collection(vec![
-                CstExpression::collection(vec![CstExpression::presence("HandMade".to_string()), CstExpression::presence("Ethan".to_string())]),
-                CstExpression::collection(vec![CstExpression::presence("HandMade".to_string()), CstExpression::presence("James".to_string())]),
-                CstExpression::collection(vec![CstExpression::presence("Generated".to_string()), CstExpression::presence("SDKJLHF".to_string())]),
-                CstExpression::collection(vec![CstExpression::presence("Generated".to_string()), CstExpression::presence("Kerflooble".to_string())]),
+        let make_pretty = Expression::collection(vec![
+            Expression::binding("run_name".to_string(), Expression::presence("first".to_string())),
+            Expression::binding("names_in_run".to_string(), Expression::collection(vec![
+                Expression::collection(vec![Expression::presence("HandMade".to_string()), Expression::presence("Ethan".to_string())]),
+                Expression::collection(vec![Expression::presence("HandMade".to_string()), Expression::presence("James".to_string())]),
+                Expression::collection(vec![Expression::presence("Generated".to_string()), Expression::presence("SDKJLHF".to_string())]),
+                Expression::collection(vec![Expression::presence("Generated".to_string()), Expression::presence("Kerflooble".to_string())]),
             ])),
-            CstExpression::pair("count".to_string(), CstExpression::presence("2".to_string()))
+            Expression::binding("count".to_string(), Expression::presence("2".to_string()))
         ]);
 
         assert_eq!(make_pretty.pretty(),

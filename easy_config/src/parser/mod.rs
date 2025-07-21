@@ -1,21 +1,77 @@
-use crate::expression::{CstData, CstExpression};
-use crate::lexer::{Lexer, token};
+use itertools::Itertools;
+use crate::expression::{Atom, Expression, ExpressionData};
+use crate::expression::ExpressionData::Presence;
+use crate::lexer::{token, Lexer};
 use crate::lexer::token::{Kind, Token};
-use crate::lexer::token::Kind::Text;
-use crate::location::Location;
-use crate::parser::parser_error::ParserError;
+use crate::lexical_range::LexicalSpan;
+use crate::parser::parser_error::{Contextualize, ParserError};
 
 pub mod parser_error;
+pub struct FinishedParser {
+    expressions: Vec<Expression>,
+    errors: Vec<ParserError>
+}
+
+impl From<Parser> for FinishedParser {
+    fn from(parser: Parser) -> Self {
+        Self {
+            expressions: parser.expressions,
+            errors: parser.errors,
+        }
+    }
+}
+impl FinishedParser {
+    pub fn expressions(&self) -> &[Expression] {
+        &self.expressions
+    }
+    pub fn errors(&self) -> &[ParserError] {
+        &self.errors
+    }
+
+    pub fn unwrap(self) -> Vec<Expression> {
+        if !self.errors.is_empty() {
+            let panic_text= self.errors.iter()
+                .map(|x| x.to_string())
+                .join("\n");
+            panic!("{}", panic_text);
+        }
+
+        self.expressions
+    }
+}
 
 pub struct Parser {
     tokens: Vec<Token>,
-    current_index: usize
+    current_index: usize,
+    expressions: Vec<Expression>,
+    errors: Vec<ParserError>,
+    source: String
 }
+
+/*
+enum -> TEXT list
+atom -> NUMBER
+      | TEXT
+
+presence -> atom
+bind -> TEXT "=" expression
+list -> "(" expression* ")"
+expression -> presence
+            | bind
+            | enum
+            | list
+*/
+type Tk = token::Kind;
+type Ek = parser_error::Kind;
 impl Parser {
     pub fn new(text: impl AsRef<str>) -> Parser {
+        let text = text.as_ref();
         Self {
-            tokens: Lexer::new(text.as_ref()).collect(),
+            tokens: Lexer::new(text).collect(),
             current_index: 0,
+            expressions: vec![],
+            errors: vec![],
+            source: text.to_string()
         }
     }
 
@@ -27,169 +83,218 @@ impl Parser {
         self.current_index == self.tokens.len()
     }
 
-    fn current(&self) -> Option<Token> {
-        self.tokens.get(self.current_index).map(|x| x.clone())
+    fn get(&self, at: usize) -> Token {
+        self.tokens.get(at).unwrap_or(&Token::new_eoi(at)).clone()
     }
 
-    fn eat(&mut self, kind: token::Kind) -> Option<Token> {
+    fn current(&self) -> Token {
+        self.get(self.current_index)
+    }
+
+    fn next(&mut self) -> Token {
+        let current_index = self.current_index;
+        self.advance();
+        self.get(current_index)
+    }
+    fn eat(&mut self, kind: Tk) -> Result<Token, Token> {
         let t = self.expect(kind);
-        if t.is_some() {
+        if t.is_ok() {
             self.advance();
         }
+
         t
     }
-
-    fn expect(&self, kind: token::Kind) -> Option<Token> {
-        let token = self.current()?;
-        if token.kind() == kind {
-            Some(token)
+    fn expect(&self, kind: Tk) -> Result<Token, Token> {
+        let current = self.current();
+        if current.kind() == kind {
+            Ok(current)
         } else {
-            None
+            Err(current)
+        }
+    }
+    fn unexpected_token_error(&self, offender: Token, expected: &'static [Tk]) -> ParserError {
+        let span = offender.span();
+        ParserError::on_span(
+            Ek::UnexpectedToken(offender, expected),
+            span,
+            &self.source
+        )
+    }
+    fn parse_atom(&mut self) -> Result<Token, ParserError> {
+        let token = self.next().eoi_check(&self.source)?;
+
+        if token.kind() == Tk::Text {
+            return Ok(token)
+        }
+
+        if token.kind() == Tk::Number {
+            return Ok(token)
+        }
+
+        Err(self.unexpected_token_error(token, &[Tk::Text, Tk::Number]))
+    }
+
+    fn parse_binding(&mut self, identifier: Token) -> Result<Expression, ParserError> {
+        if let Some(errant_index) = identifier.invalid_identifier_char_index() {
+            let errant_index = identifier.span().start() + errant_index;
+            return Err(ParserError::on_span(Ek::InvalidIdentifier(identifier), LexicalSpan::new(errant_index, errant_index + 1), &self.source))
+        }
+
+        if let Err(token) = self.eat(Tk::Equals) {
+            let token = token.eoi_check(&self.source)?;
+            return Err(self.unexpected_token_error(token, &[Tk::Equals]))
+        }
+
+        let value = self
+            .parse_expression()
+            .contextualize(format!(
+                "Failed to parse the value of the binding '{}'.",
+                identifier.lexeme())
+            )?;
+        let span = LexicalSpan::new(identifier.span().start(), value.lexical_range.unwrap().end());
+        Ok(Expression::uncommented(
+            ExpressionData::Binding(identifier.lexeme().to_string(), Box::new(value)),
+            span
+        ))
+    }
+
+    fn parse_list(&mut self, l_paren: Token) -> Result<Expression, ParserError> {
+        let mut elements = vec![];
+
+        loop {
+            if let Ok(r_paren) = self.eat(Tk::RParen) {
+                return Ok(Expression::uncommented(
+                    ExpressionData::List(elements),
+                    LexicalSpan::new(l_paren.span().start(), r_paren.span().end())
+                ))
+            }
+
+            elements.push(self.parse_expression()?);
         }
     }
 
-    fn parse_pair(&mut self) -> Result<CstExpression, ParserError> {
-        let key_token = self.current().ok_or(ParserError::eoi(&self))?;
-        if key_token.kind() != Text {
-            return Err(ParserError::expected_text(&key_token))
+    fn parse_expression(&mut self) -> Result<Expression, ParserError> {
+        if let Ok(l_paren) = self.eat(Tk::LParen) {
+            return self.parse_list(l_paren).contextualize("Tried to parse a list as an expression.");
         }
-        self.advance();
 
-        let key_text = key_token.lexeme().to_string();
+        let name = self.parse_atom()
+            .map_err(|x| x.contextualize("Expected an atom that was either a presence or a binding."))?;
 
-        if self.eat(Kind::Equals).is_some() {
-            Ok(key_token.to_cst_expr(CstData::Pair(key_text, Box::new(self.parse_expr()?))))
-        } else {
-            Ok(key_token.to_cst_expr(CstData::Presence(key_text)))
+        if self.expect(Tk::Equals).is_ok() {
+            return self.parse_binding(name)
         }
+
+        let atom = match name.kind() {
+            Kind::Number => Atom::Number(name.lexeme().to_string()),
+            Kind::Text => Atom::Text(name.lexeme().to_string()),
+            _ => return Err(self.unexpected_token_error(name, &[Tk::Text, Tk::Number])),
+        };
+
+        Ok(Expression::uncommented(Presence(atom), name.span()))
     }
 
-    fn parse_collection(&mut self) -> Result<CstExpression, ParserError> {
-        let lparen = self.current().ok_or(ParserError::eoi(&self))?;
-
-        if lparen.kind() != Kind::LParen {
-            return Err(ParserError::expected_l_paren(&lparen))
-        }
-        self.advance();
-
-        let mut collection = vec![];
-        while self.eat(Kind::RParen).is_none() {
-            collection.push(self.parse_expr()?)
-        }
-
-        Ok(lparen.to_cst_expr(CstData::Collection(collection)))
-    }
-
-    fn parse_expr(&mut self) -> Result<CstExpression, ParserError> {
-        let current = self.current().ok_or(ParserError::eoi(&self))?;
-
-        match current.kind() {
-            Kind::LParen => self.parse_collection(),
-            Kind::RParen => Err(ParserError::unexpected_r_paren(&current)),
-            Kind::Text => self.parse_pair(),
-            Kind::Equals => Err(ParserError::unexpected_equals(&current)),
-        }
-    }
-
-    pub fn parse_tokens(&mut self) -> Result<CstExpression, ParserError> {
-        let mut collection = vec![];
+    pub fn parse(mut self) -> FinishedParser {
         while !self.finished() {
-            collection.push(self.parse_expr()?)
+            match self.parse_expression() {
+                Ok(o) => self.expressions.push(o),
+                Err(e) => self.errors.push(e),
+            }
+
         }
 
-        Ok(CstExpression::new(
-            CstData::Collection(collection),
-            Some(Location {row: 1, column: 1}),
-            None
-        ).minimized())
-    }
-
-    pub fn parse(text: impl AsRef<str>) -> Result<CstExpression, ParserError> {
-        Parser::new(text).parse_tokens()
+        FinishedParser::from(self)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::expression::CstData::{Collection, Pair, Presence};
+    use crate::expression::ExpressionData::{List, Binding, Presence};
+    use crate::lexical_range::LexicalSpan;
     use super::*;
 
     #[test]
     fn presence() {
-        let p = Parser::new("some-key").parse_tokens().unwrap();
-        assert_eq!(p, CstExpression::uncommented(Presence(String::from("some-key")), Location::new(1, 1)))
+        let p = Parser::new("some-key").parse().unwrap();
+        assert_eq!(p[0], Expression::uncommented(
+            Presence("some-key".into()),
+            LexicalSpan::new(0, 8)
+        ))
     }
 
     #[test]
-    fn pair() {
-        let p = Parser::new("some-key = value").parse_tokens().unwrap();
-        assert_eq!(p, CstExpression::uncommented(Pair(
-            "some-key".to_string(),
-            Box::new(CstExpression::uncommented(
-                Presence("value".to_string()),
-                Location::new(1, 12)
+    fn binding() {
+        let p = Parser::new("some_key = value").parse().unwrap();
+        assert_eq!(p[0], Expression::uncommented(Binding(
+            "some_key".to_string(),
+            Box::new(Expression::uncommented(
+                Presence("value".into()),
+                LexicalSpan::new(11, 16)
             ))
-        ), Location::new(1, 1)))
+        ), LexicalSpan::new(0, 16)));
     }
 
     #[test]
-    fn paired_collection() {
-        let p = Parser::new("some-key = (a b)").parse_tokens().unwrap();
-        assert_eq!(p, CstExpression::uncommented(
-            Pair("some-key".to_string(), Box::new(CstExpression::uncommented(
-                Collection(vec![
-                    CstExpression::uncommented(Presence("a".to_string()), Location::new(1, 13)),
-                    CstExpression::uncommented(Presence("b".to_string()), Location::new(1, 15))
+    fn bound_collection() {
+        let p = Parser::new("some_key = (a b)").parse().unwrap();
+        assert_eq!(p[0], Expression::uncommented(
+            Binding("some_key".to_string(), Box::new(Expression::uncommented(
+                List(vec![
+                    Expression::uncommented(Presence("a".into()), LexicalSpan::new(12, 13)),
+                    Expression::uncommented(Presence("b".into()), LexicalSpan::new(14, 15))
                 ]),
-                Location::new(1, 12)
+                LexicalSpan::new(11, 16)
             ))),
-            Location::new(1, 1)
+            LexicalSpan::new(0, 16)
         ))
     }
 
     #[test]
     fn nesting() {
-        let p = Parser::new("some-key = (a = b c)").parse_tokens().unwrap();
-        assert_eq!(p, CstExpression::uncommented(
-            Pair("some-key".to_string(), Box::new(CstExpression::uncommented(
-                Collection(vec![
-                    CstExpression::uncommented(
-                        Pair("a".to_string(), Box::new(CstExpression::uncommented(
-                            Presence("b".to_string()),
-                            Location::new(1, 17))
-                        )),
-                        Location::new(1, 13)
-                    ),
-                    CstExpression::uncommented(Presence("c".to_string()), Location::new(1, 19))
-                ]),
-                Location::new(1, 12)))),
-            Location::new(1, 1)
-        ))
+        let p = Parser::new("some_key = (a = b c)").parse().unwrap();
+        let list = Expression::uncommented(List(vec![
+            Expression::uncommented(
+                Binding("a".into(), Box::new(Expression::uncommented(
+                    Presence("b".into()),
+                    LexicalSpan::new(16, 17))
+                )),
+                LexicalSpan::new(12, 17)
+            ),
+            Expression::uncommented(Presence("c".into()), LexicalSpan::new(18, 19))
+        ]),
+           LexicalSpan::new(11, 20)
+        );
+        let binding =  Expression::uncommented(
+            Binding("some_key".into(), Box::new(list)),
+            LexicalSpan::new(0, 20)
+        );
+
+        assert_eq!(p[0], binding)
     }
 
     #[test]
     fn collection() {
-        let p = Parser::new("(a b)").parse_tokens().unwrap();
-        assert_eq!(p, CstExpression::uncommented(Collection(vec![
-            CstExpression::uncommented(Presence(String::from("a")), Location::new(1, 2)),
-            CstExpression::uncommented(Presence(String::from("b")), Location::new(1, 4)),
-        ]), Location::new(1, 1)))
+        let p = Parser::new("(a b)").parse().unwrap();
+        assert_eq!(p[0], Expression::uncommented(List(vec![
+            Expression::uncommented(Presence("a".into()), LexicalSpan::new(1, 2)),
+            Expression::uncommented(Presence("b".into()), LexicalSpan::new(3, 4)),
+        ]), LexicalSpan::new(0, 5)))
     }
 
     #[test]
     fn parse_the_thing() {
-        let text = r"some-key = value
-nested-key = (
+        let text = r"some_key = value
+nested_key = (
     one = 1
     # a comment goes here
     two = 2 # or here
 )
-escaped-characters = (
+escaped_characters = (
     \(
     \)
     \=
     \\
 )";
-        Parser::new(text).parse_tokens().unwrap();
+        Parser::new(text).parse().unwrap();
     }
 }
