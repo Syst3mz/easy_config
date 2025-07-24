@@ -1,10 +1,11 @@
 use itertools::Itertools;
+use crate::config_error::Contextualize;
 use crate::expression::{Atom, Expression, ExpressionData};
 use crate::expression::ExpressionData::Presence;
 use crate::lexer::{token, Lexer};
 use crate::lexer::token::{Kind, Token};
 use crate::lexical_range::LexicalSpan;
-use crate::parser::parser_error::{Contextualize, ParserError};
+use crate::parser::parser_error::{ParserError};
 
 pub mod parser_error;
 pub struct FinishedParser {
@@ -21,10 +22,10 @@ impl From<Parser> for FinishedParser {
     }
 }
 impl FinishedParser {
-    pub fn expressions(&self) -> &[Expression] {
+    pub fn expressions(&self) -> &Vec<Expression> {
         &self.expressions
     }
-    pub fn errors(&self) -> &[ParserError] {
+    pub fn errors(&self) -> &Vec<ParserError> {
         &self.errors
     }
 
@@ -151,10 +152,20 @@ impl Parser {
                 "Failed to parse the value of the binding '{}'.",
                 identifier.lexeme())
             )?;
-        let span = LexicalSpan::new(identifier.span().start(), value.lexical_range.unwrap().end());
+
+        if let Ok(l_paren) = self.eat(Tk::LParen) {
+            let mut list = self.parse_list(l_paren)?;
+            list.prepend_into_list(value);
+
+            let span = identifier.span().combine(list.span());
+            return Ok(Expression::uncommented(ExpressionData::Binding(
+                identifier.lexeme().to_string(), Box::new(list), span
+            )));
+        }
+
+        let span = identifier.span().combine(value.span());
         Ok(Expression::uncommented(
-            ExpressionData::Binding(identifier.lexeme().to_string(), Box::new(value)),
-            span
+            ExpressionData::Binding(identifier.lexeme().to_string(), Box::new(value), span)
         ))
     }
 
@@ -164,8 +175,7 @@ impl Parser {
         loop {
             if let Ok(r_paren) = self.eat(Tk::RParen) {
                 return Ok(Expression::uncommented(
-                    ExpressionData::List(elements),
-                    LexicalSpan::new(l_paren.span().start(), r_paren.span().end())
+                    ExpressionData::List(elements, l_paren.span().combine(r_paren.span())),
                 ))
             }
 
@@ -191,7 +201,7 @@ impl Parser {
             _ => return Err(self.unexpected_token_error(name, &[Tk::Text, Tk::Number])),
         };
 
-        Ok(Expression::uncommented(Presence(atom), name.span()))
+        Ok(Expression::uncommented(Presence(atom, name.span())))
     }
 
     pub fn parse(mut self) -> FinishedParser {
@@ -215,10 +225,9 @@ mod tests {
 
     #[test]
     fn presence() {
-        let p = Parser::new("some-key").parse().unwrap();
+        let p = Parser::new("some_key").parse().unwrap();
         assert_eq!(p[0], Expression::uncommented(
-            Presence("some-key".into()),
-            LexicalSpan::new(0, 8)
+            Presence("some_key".into(), LexicalSpan::new(0, 8)),
         ))
     }
 
@@ -228,10 +237,10 @@ mod tests {
         assert_eq!(p[0], Expression::uncommented(Binding(
             "some_key".to_string(),
             Box::new(Expression::uncommented(
-                Presence("value".into()),
-                LexicalSpan::new(11, 16)
-            ))
-        ), LexicalSpan::new(0, 16)));
+                Presence("value".into(), LexicalSpan::new(11, 16)),
+            )),
+            LexicalSpan::new(0, 16)
+        )));
     }
 
     #[test]
@@ -240,13 +249,10 @@ mod tests {
         assert_eq!(p[0], Expression::uncommented(
             Binding("some_key".to_string(), Box::new(Expression::uncommented(
                 List(vec![
-                    Expression::uncommented(Presence("a".into()), LexicalSpan::new(12, 13)),
-                    Expression::uncommented(Presence("b".into()), LexicalSpan::new(14, 15))
-                ]),
-                LexicalSpan::new(11, 16)
-            ))),
-            LexicalSpan::new(0, 16)
-        ))
+                    Expression::uncommented(Presence("a".into(), LexicalSpan::new(12, 13))),
+                    Expression::uncommented(Presence("b".into(), LexicalSpan::new(14, 15)))
+                ], LexicalSpan::new(11, 16))
+            )), LexicalSpan::new(0, 16))))
     }
 
     #[test]
@@ -255,18 +261,13 @@ mod tests {
         let list = Expression::uncommented(List(vec![
             Expression::uncommented(
                 Binding("a".into(), Box::new(Expression::uncommented(
-                    Presence("b".into()),
-                    LexicalSpan::new(16, 17))
-                )),
-                LexicalSpan::new(12, 17)
+                    Presence("b".into(), LexicalSpan::new(16, 17)))
+                ), LexicalSpan::new(12, 17))
             ),
-            Expression::uncommented(Presence("c".into()), LexicalSpan::new(18, 19))
-        ]),
-           LexicalSpan::new(11, 20)
-        );
+            Expression::uncommented(Presence("c".into(), LexicalSpan::new(18, 19)))
+        ], LexicalSpan::new(11, 20)));
         let binding =  Expression::uncommented(
-            Binding("some_key".into(), Box::new(list)),
-            LexicalSpan::new(0, 20)
+            Binding("some_key".into(), Box::new(list), LexicalSpan::new(0, 20))
         );
 
         assert_eq!(p[0], binding)
@@ -276,9 +277,24 @@ mod tests {
     fn collection() {
         let p = Parser::new("(a b)").parse().unwrap();
         assert_eq!(p[0], Expression::uncommented(List(vec![
-            Expression::uncommented(Presence("a".into()), LexicalSpan::new(1, 2)),
-            Expression::uncommented(Presence("b".into()), LexicalSpan::new(3, 4)),
-        ]), LexicalSpan::new(0, 5)))
+            Expression::uncommented(Presence("a".into(), LexicalSpan::new(1, 2))),
+            Expression::uncommented(Presence("b".into(), LexicalSpan::new(3, 4))),
+        ], LexicalSpan::new(0, 5))))
+    }
+
+    #[test]
+    fn parse_single_enum() {
+        let p = Parser::new("bind = Some(thing)").parse().unwrap();
+        let binding = Expression::uncommented(
+            Binding("bind".into(), Box::new(Expression::uncommented(
+                List(vec![
+                    Expression::uncommented(Presence("Some".into(), LexicalSpan::new(7, 11))),
+                    Expression::uncommented(Presence("thing".into(), LexicalSpan::new(12, 17)))
+                ], LexicalSpan::new(11, 18))
+            )), LexicalSpan::new(0, 18))
+        );
+
+        assert_eq!(p[0], binding)
     }
 
     #[test]

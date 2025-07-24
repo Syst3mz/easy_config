@@ -5,6 +5,9 @@ pub struct LexicalSpan {
 }
 
 impl LexicalSpan {
+    pub fn zeros() -> LexicalSpan {
+        LexicalSpan { start: 0, end: 0 }
+    }
     pub fn new(start: usize, end: usize) -> LexicalSpan {
         LexicalSpan { start, end }
     }
@@ -15,6 +18,17 @@ impl LexicalSpan {
     
     pub fn end(&self) -> usize {
         self.end
+    }
+    pub fn combine(self, other: LexicalSpan) -> LexicalSpan {
+        LexicalSpan::new(self.start().min(other.start()), self.end().max(other.end()))
+    }
+    
+    pub fn slice<'a>(&'a self, item: &'a str) -> &'a str {
+        if self.end <= self.start {
+            ""
+        } else {
+            &item[self.start..self.end]
+        }
     }
 }
 

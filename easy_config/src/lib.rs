@@ -4,6 +4,7 @@ pub mod expression;
 pub mod parser;
 pub mod serialization;
 pub mod lexical_range;
+pub mod config_error;
 
 #[cfg(feature = "derive")]
 pub use easy_config_derive::Config;

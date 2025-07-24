@@ -1,6 +1,6 @@
 use std::fmt::Display;
 use crate::lexical_range::LexicalSpan;
-use crate::parser::parser_error::ParserError;
+use crate::parser::parser_error::{end_of_input, ParserError};
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum Kind {
@@ -84,7 +84,7 @@ impl Token {
 
     pub fn eoi_check(self, source_text: impl AsRef<str>) -> Result<Self, ParserError> {
         if self.kind == Kind::Eoi {
-            Err(ParserError::end_of_input(source_text))
+            Err(end_of_input(source_text))
         } else {
             Ok(self)
         }
