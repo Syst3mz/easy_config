@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use crate::lexical_range::LexicalSpan;
+use crate::lexical_span::LexicalSpan;
 use crate::parser::parser_error::{end_of_input, ParserError};
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]

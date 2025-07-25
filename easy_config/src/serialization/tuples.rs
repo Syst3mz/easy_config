@@ -1,5 +1,5 @@
 use crate::expression::ExpressionData;
-use crate::lexical_range::LexicalSpan;
+use crate::lexical_span::LexicalSpan;
 use crate::serialization::{Config};
 use crate::serialization::Expression;
 use crate::serialization::serialization_error::{Kind, SerializationError};
@@ -19,13 +19,6 @@ fn extract_expr(exprs: &mut impl Iterator<Item=(usize, Expression)>, last: &mut 
             *last = index;
             expr
         })
-}
-macro_rules! count_exprs {
-    () => { 0 };
-    ($($x:expr),*) => {
-        <[()]>::len(&[$(count_exprs![@sub $x]),*])
-    };
-    (@sub $_x:expr) => { () };
 }
 
 macro_rules! impl_tuple {
@@ -84,10 +77,13 @@ impl_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9);
 impl_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10);
 impl_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11);
 impl_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
+impl_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);
+impl_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14);
+impl_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15);
+impl_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16);
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::Parser;
     use super::*;
 
     #[test]

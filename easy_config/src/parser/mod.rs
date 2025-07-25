@@ -4,7 +4,7 @@ use crate::expression::{Atom, Expression, ExpressionData};
 use crate::expression::ExpressionData::Presence;
 use crate::lexer::{token, Lexer};
 use crate::lexer::token::{Kind, Token};
-use crate::lexical_range::LexicalSpan;
+use crate::lexical_span::LexicalSpan;
 use crate::parser::parser_error::{ParserError};
 
 pub mod parser_error;
@@ -220,7 +220,7 @@ impl Parser {
 #[cfg(test)]
 mod tests {
     use crate::expression::ExpressionData::{List, Binding, Presence};
-    use crate::lexical_range::LexicalSpan;
+    use crate::lexical_span::LexicalSpan;
     use super::*;
 
     #[test]

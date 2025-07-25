@@ -30,6 +30,23 @@ impl LexicalSpan {
             &item[self.start..self.end]
         }
     }
+
+    pub fn find_row_and_column(&self, source_text: impl AsRef<str>) -> (usize, usize) {
+        let source_text = source_text.as_ref();
+        let mut row = 1;
+        let mut col = 0;
+
+        for chr in source_text.chars() {
+            if chr == '\n' {
+                row += 1;
+                col = 0;
+            } else {
+                col += 1;
+            }
+        }
+
+        (row, col)
+    }
 }
 
 impl IntoIterator for LexicalSpan {

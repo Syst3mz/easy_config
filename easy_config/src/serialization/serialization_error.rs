@@ -17,14 +17,14 @@ pub enum Kind {
     ParseCharError(ParseCharError),
     ParseFloatError(ParseFloatError),
     ParseBoolError(ParseBoolError),
-
-
-
+    
     ExpectedNumber(String),
     ExpectedText(String),
     ExpectedPresence(Expression),
     ExpectedBinding(Expression),
     ExpectedList(Expression),
+
+    ExpectedFieldGotEoi(String)
 }
 
 impl From<std::io::Error> for SerializationError {

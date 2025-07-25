@@ -1,6 +1,8 @@
-mod primitives;
-mod tuples;
-mod serialization_error;
+pub mod primitives;
+pub mod tuples;
+pub mod serialization_error;
+pub mod collections;
+pub mod serialize_enum;
 
 use std::path::Path;
 use crate::expression::{ExpressionData, Expression};
@@ -51,67 +53,39 @@ pub trait DefaultConfig: Config + Default {
 
 impl<T: Default + Config> DefaultConfig for T {}
 
-
-type DeserializationIterator = std::vec::IntoIter<Expression>;
-
-pub trait DeserializeExtension {
-    fn deserialize_get(&self, key: impl AsRef<str>) -> Result<Expression, Kind>;
-    fn into_deserialization_iterator(self) -> Option<DeserializationIterator>;
-}
-
-impl DeserializeExtension for Expression {
-    fn deserialize_get(&self, key: impl AsRef<str>) -> Result<Expression, Kind> {
-        let key = key.as_ref();
-        self.get(key).ok_or(Kind::UnableToLocateBindingName(key.to_string()))
-    }
-
-    fn into_deserialization_iterator(self) -> Option<DeserializationIterator> {
-        match self.data {
-            ExpressionData::Presence(_, _) | ExpressionData::Binding(_, _, _) => Some(vec![self].into_iter()),
-            ExpressionData::List(c, _) => Some(c.into_iter())
-        }
-    }
-}
-
-
 #[cfg(test)]
 mod tests {
-    use crate::lexical_range::LexicalSpan;
+    use crate::lexer::Lexer;
+    use crate::lexical_span::LexicalSpan;
     use crate::parser::Parser;
     use super::*;
-
-    #[derive(Debug, PartialEq)]
-    enum DemoEnum {
-        Hi,
-        String(String)
-    }
     
     #[derive(Debug, PartialEq)]
     struct Demo {
         key: String,
-        vec: Vec<DemoEnum>,
+        vec: Vec<i32>,
     }
 
     impl Config for Demo {
         fn serialize(&self) -> Expression {
-            let list: Vec<Expression> = self.vec.iter().map(|x| match x {
-                DemoEnum::Hi => Expression::presence("Hi", LexicalSpan::zeros()),
-                DemoEnum::String(s) => Expression::list(vec![
-                    Expression::presence("String", LexicalSpan::zeros()),
-                    Expression::list(vec![Expression::presence(s.as_str(), LexicalSpan::zeros())], LexicalSpan::zeros())
-                ], LexicalSpan::zeros()),
-            }).collect();
             Expression::list(vec![
-                Expression::binding("key".into(), Expression::presence(self.key.clone(), LexicalSpan::zeros()), LexicalSpan::zeros()),
-                Expression::list(list, LexicalSpan::zeros()),
-            ], LexicalSpan::new(0,0,))
+                self.key.serialize(),
+                self.vec.serialize()
+            ], LexicalSpan::zeros())
         }
 
         fn deserialize(expr: Expression, source_text: impl AsRef<str>) -> Result<Self, SerializationError>
         where
             Self: Sized,
         {
-            todo!()
+            let span = expr.span();
+            let source_text = source_text.as_ref();
+
+            let mut iter = expr.into_iter();
+            Ok(Self {
+                key: String::deserialize(iter.next_field("key", source_text)?, source_text)?,
+                vec: Vec::deserialize(iter.next_field("vec", source_text)?, source_text)?,
+            })
         }
     }
 
@@ -119,30 +93,31 @@ mod tests {
     fn demo() -> Demo {
         Demo {
             key: "cat".to_string(),
-            vec: vec![DemoEnum::Hi, DemoEnum::String("dog".to_string())],
+            vec: vec![1, 2, 3],
         }
     }
 
+    const EXPECTED: &'static str = "(cat (1 2 3))";
     #[test]
     fn serialize() {
         let d = demo();
-        assert_eq!(d.serialize().dump(), "(key = cat vec = (bird dog))")
+        assert_eq!(d.serialize().minimized().dump(), EXPECTED)
     }
 
-    /*#[test]
+    #[test]
     fn deserialize() {
-        let parsed = Parser::new(demo().serialize().dump()).parse().unwrap();
+        let mut parsed = Parser::new(EXPECTED).parse().unwrap();
         assert_eq!(
-            Demo::deserialize(parsed).unwrap(), demo()
+            Demo::deserialize(parsed.remove(0), EXPECTED).unwrap(), demo()
         )
     }
 
     #[should_panic]
     #[test]
     fn deserialize_err() {
-        let parsed = Parser::new("(key = cat vec = a = b)").parse().unwrap();
+        let mut parsed = Parser::new("()").parse().unwrap();
         assert_eq!(
-            Demo::deserialize(parsed).unwrap(), demo()
+            Demo::deserialize(parsed.remove(0), "()").unwrap(), demo()
         )
-    }*/
+    }
 }

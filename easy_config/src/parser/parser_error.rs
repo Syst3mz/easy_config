@@ -1,11 +1,8 @@
-use std::fmt::Display;
 use itertools::Itertools;
-use crate::config_error::{ConfigError, ERROR_WINDOW_SIZE};
+use crate::config_error::ConfigError;
 use crate::config_error::describe::Describe;
-use crate::expression::Expression;
 use crate::lexer::token::Token;
-use crate::lexical_range;
-use crate::lexical_range::LexicalSpan;
+use crate::lexical_span::LexicalSpan;
 
 type Tk = crate::lexer::token::Kind;
 pub type ParserError = ConfigError<Kind>;

@@ -1,6 +1,7 @@
 use std::fmt::Display;
 use crate::expression::ExpressionData::{List, Binding, Presence};
-use crate::lexical_range::LexicalSpan;
+use crate::expression_iterator::ExpressionIterator;
+use crate::lexical_span::LexicalSpan;
 
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Atom {
@@ -12,6 +13,7 @@ impl Atom {
     pub fn is_text(&self) -> bool {
         matches!(self, Self::Text(_))
     }
+    pub fn is_number(&self) -> bool {matches!(self, Self::Number(_))}
 }
 
 impl Display for Atom {
@@ -230,7 +232,13 @@ impl From<ExpressionData> for Expression {
         Self::new(value, None)
     }
 }
-
+impl IntoIterator for Expression {
+    type Item = Expression;
+    type IntoIter = ExpressionIterator;
+    fn into_iter(self) -> Self::IntoIter {
+        ExpressionIterator::new(self)
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

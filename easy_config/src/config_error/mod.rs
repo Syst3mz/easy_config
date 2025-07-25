@@ -2,20 +2,20 @@ pub mod describe;
 
 use std::fmt::Display;
 use crate::config_error::describe::Describe;
-use crate::expression::Expression;
-use crate::lexical_range::LexicalSpan;
+use crate::lexical_span::LexicalSpan;
 
 pub const ERROR_WINDOW_SIZE: usize = 10;
-fn build_error_area(range: LexicalSpan, source_text: impl AsRef<str>) -> String {
-    // todo include line / col numbers
+fn build_error_area(span: LexicalSpan, source_text: impl AsRef<str>) -> String {
     let source_text = source_text.as_ref();
-    let lowest_bound = range.start().saturating_sub(ERROR_WINDOW_SIZE);
+    
+    let lowest_bound = span.start().saturating_sub(ERROR_WINDOW_SIZE);
     let left_dots = if lowest_bound > 0 { "..." } else { "" };
 
-    let highest_bound = (range.end() + ERROR_WINDOW_SIZE).min(source_text.len());
+    let highest_bound = (span.end() + ERROR_WINDOW_SIZE).min(source_text.len());
     let right_dots = if highest_bound < source_text.len() {"..."} else {""};
-    let index_of_offender = range.start() - lowest_bound;
+    let index_of_offender = span.start() - lowest_bound;
     let mut offset = " ".repeat(index_of_offender);
+    
     let span = LexicalSpan::new(lowest_bound, highest_bound);
     let window = span.slice(source_text);
     if window.is_empty() {
@@ -39,7 +39,10 @@ pub enum ConfigError<Kind> {
 
 impl<Kind> ConfigError<Kind> {
     pub fn on_span(kind: Kind, span: LexicalSpan, source_text: impl AsRef<str>) -> Self {
+        let source_text = source_text.as_ref();
+        let (row, col) = span.find_row_and_column(source_text);
         Self::FirstLevelError(kind, build_error_area(span, source_text))
+            .contextualize(format!("Error at {row}:{col}"))
     }
 
     pub fn contextualize(self, context: impl AsRef<str>) -> Self {
