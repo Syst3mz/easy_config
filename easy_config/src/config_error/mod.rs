@@ -48,6 +48,13 @@ impl<Kind> ConfigError<Kind> {
     pub fn contextualize(self, context: impl AsRef<str>) -> Self {
         Self::ContextualizedError(context.as_ref().to_string(), Box::new(self))
     }
+    
+    pub fn kind(&self) -> &Kind {
+        match self {
+            ConfigError::FirstLevelError(k, _) => k,
+            ConfigError::ContextualizedError(_, n) => n.kind(),
+        }
+    }
 }
 
 impl<Kind: Describe> Display for ConfigError<Kind> {

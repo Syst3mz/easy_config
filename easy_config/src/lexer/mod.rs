@@ -4,7 +4,7 @@ use itertools::Itertools;
 use crate::lexer::token::{Kind, Token};
 
 pub mod token;
-const STOPPING_CHARS: [char; 4] = ['(', '=', ')', '#'];
+pub const STOPPING_CHARS: [char; 4] = ['(', '=', ')', '#'];
 fn is_token_boundary(c: char) -> bool {
     c.is_whitespace() ||
     STOPPING_CHARS.contains(&c)

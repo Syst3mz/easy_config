@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use crate::expression::ExpressionData::{List, Binding, Presence};
+use crate::expression::ExpressionData::{List, BindingExpr, Presence};
 use crate::expression_iterator::ExpressionIterator;
 use crate::lexical_span::LexicalSpan;
 
@@ -62,9 +62,15 @@ numeric_into_atom!(f32);
 numeric_into_atom!(f64);
 
 #[derive(Debug, Clone,Ord, PartialOrd, Eq, PartialEq)]
+pub struct Binding {
+    pub name :String,
+    pub value: Box<Expression>,
+    pub span: LexicalSpan
+}
+#[derive(Debug, Clone,Ord, PartialOrd, Eq, PartialEq)]
 pub enum ExpressionData {
     Presence(Atom, LexicalSpan),
-    Binding(String, Box<Expression>, LexicalSpan),
+    BindingExpr(Binding),
     List(Vec<Expression>, LexicalSpan)
 }
 
@@ -72,9 +78,20 @@ impl ExpressionData {
     pub fn span(&self) -> LexicalSpan {
         match self {
             Presence(_, s) => *s,
-            Binding(_, _, s) => *s,
+            BindingExpr(b) => b.span,
             List(_, s) => *s
         }
+    }
+
+    pub fn is_presence(&self) -> bool {
+        matches!(self, Presence(_, _))
+    }
+    pub fn is_binding(&self) -> bool {
+        matches!(self, BindingExpr(_))
+    }
+
+    pub fn is_list(&self) -> bool {
+        matches!(self, List(_, _))
     }
 }
 
@@ -105,19 +122,19 @@ impl Expression {
         }
     }
 
-    pub fn uncommented(data: ExpressionData) -> Expression {
-        Self::new(data, None)
+    pub fn presence(value: impl Into<Atom>) -> Self {
+        Self::new(Presence(value.into(), LexicalSpan::zeros()), None)
     }
-
-    pub fn presence(value: impl Into<Atom>, lexical_span: LexicalSpan) -> Self {
-        Self::new(Presence(value.into(), lexical_span), None)
+    pub fn binding(key: impl AsRef<str>, value: Expression) -> Self {
+        Self::new(BindingExpr(Binding {
+            name: key.as_ref().to_string(),
+            value: Box::new(value),             
+            span: LexicalSpan::zeros(),
+        }), None)
     }
-    pub fn binding(key: String, value: Expression, lexical_span: LexicalSpan) -> Self {
-        Self::new(Binding(key, Box::new(value), lexical_span), None)
-    }
-    pub fn list(vec: Vec<Expression>, lexical_span: LexicalSpan) -> Self {
+    pub fn list(vec: Vec<Expression>) -> Self {
         Self::new(
-            List(vec, lexical_span),
+            List(vec, LexicalSpan::zeros()),
             None,
         )
     }
@@ -126,11 +143,21 @@ impl Expression {
         self.comment = Some(comment);
         self
     }
+    
+    pub fn with_span(mut self, lexical_span: LexicalSpan) -> Self {
+        match &mut self.data {
+            Presence(_, s)   |
+            List(_, s)    => {*s = lexical_span},
+            BindingExpr(b) => {b.span = lexical_span;}
+        }
+        
+        self
+    }
 
     pub fn uncomented_pretty(&self) -> String {
         match &self.data {
             Presence(s, _) => s.to_string(),
-            Binding(s, e, _) => format!("{} = {}", s, e.pretty()),
+            BindingExpr(b) => format!("{} = {}", b.name, b.value.pretty()),
             List(c, _) => format!(
                 "(\n{}\n)",
                 indent(c.iter().map(|x| x.pretty()).collect::<Vec<String>>().join("\n"), "\t")
@@ -148,7 +175,7 @@ impl Expression {
     pub fn uncomented_dump(&self) -> String {
         match &self.data {
             Presence(s, _) => s.to_string(),
-            Binding(s, e, _) => format!("{} = {}", s, e.dump()),
+            BindingExpr(b) => format!("{} = {}", b.name, b.value.dump()),
             List(c, _) => format!("({})", c.iter().map(|x| x.dump()).collect::<Vec<String>>().join(" "))
         }
     }
@@ -174,56 +201,34 @@ impl Expression {
         self
     }
 
-    /// Get a value by key if it exists.
-    pub fn get(&self, key: impl AsRef<str>) -> Option<Expression> {
-        let key = key.as_ref();
-        match &self.data {
-            Presence(_, _) => Some(self.clone()),
-            Binding(k, v, _) => {
-                if key == k {
-                    Some(*v.clone())
-                } else {
-                    None
-                }
-            }
-            List(c, _) => {
-                for e in c {
-                    if let Some(e) = e.get(key) {
-                        return Some(e);
-                    }
-                }
-
-                None
-            }
-        }
-    }
-
-    /// Return the value stored in an `Expression` as a `&String` IFF it is a singular value.
-    pub fn release(&self) -> Option<&Atom> {
-        match &self.data {
-            Presence(p, _) => Some(p),
-            Binding(_, v, _) => v.release(),
-            List(_, _) => None
-        }
-    }
-
-    /// Check if two data blocks are the same, ignoring the positional information.
-    pub fn data_equivalent(&self, other: &Self) -> bool {
-        self.data == other.data
-    }
-
-    /// inserts a value into a list iff the value is a list.
-    pub fn prepend_into_list(&mut self, expression: Expression) {
-        match &mut self.data {
-            List(v, _) => {
-                v.insert(0, expression);
-            }
-            _ => {}
-        }
-    }
-
     pub fn span(&self) -> LexicalSpan {
         self.data.span()
+    }
+    pub fn is_presence(&self) -> bool {
+        self.data.is_presence()
+    }
+    pub fn is_binding(&self) -> bool {
+        self.data.is_binding()
+    }
+    pub fn is_list(&self) -> bool {
+        self.data.is_list()
+    }
+
+    // Prepend an expr into the list if this is a list.
+    // Panics if self is not a list.
+    pub fn prepend_into_list(&mut self, expr: Expression) {
+        match &mut self.data {
+            List(l, _) => l.insert(0, expr),
+            _ => panic!("Attempted to prepend into something that was not a list!")
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn get_first_expr_or_panic(self) -> Expression {
+        match self.data {
+            List(mut l, _) => l.remove(0),
+            _ => panic!("Attempted to get the first value of a non-list expression.")
+        }
     }
 }
 
@@ -245,17 +250,17 @@ mod tests {
 
     fn nested() -> Expression {
         Expression::binding(String::from("alphabet"), Expression::list(vec![
-            Expression::presence(String::from("a"), LexicalSpan::new(0, 0)),
-            Expression::presence(String::from("b"), LexicalSpan::new(0, 0)),
-            Expression::presence(String::from("c"), LexicalSpan::new(0, 0)),
-        ], LexicalSpan::new(0, 0)), LexicalSpan::new(0, 0))
+            Expression::presence(String::from("a")),
+            Expression::presence(String::from("b")),
+            Expression::presence(String::from("c")),
+        ]))
     }
 
     fn more_nested() -> Expression {
         Expression::binding(String::from("alphabet"), Expression::list(vec![
             nested(),
             nested(),
-        ], LexicalSpan::new(0, 0)), LexicalSpan::new(0, 0))
+        ]))
     }
     #[test]
     fn dump() {
@@ -272,36 +277,18 @@ mod tests {
         assert_eq!(more_nested().pretty(), String::from("alphabet = (\n\talphabet = (\n\t\ta\n\t\tb\n\t\tc\n\t)\n\talphabet = (\n\t\ta\n\t\tb\n\t\tc\n\t)\n)"))
     }
 
-    fn get_demo_expr() -> Expression {
-        Expression::list(vec![
-            Expression::binding("key".to_string(), Expression::presence("cat".to_string(), LexicalSpan::new(0, 0)), LexicalSpan::new(0, 0)),
-            Expression::binding("vec".to_string(), Expression::list(vec![
-                Expression::presence("bird".to_string(), LexicalSpan::new(0, 0)),
-                Expression::presence("dog".to_string(), LexicalSpan::new(0, 0)),
-            ], LexicalSpan::new(0, 0)), LexicalSpan::new(0, 0)),
-        ], LexicalSpan::new(0, 0))
-    }
-    #[test]
-    fn get() {
-        let gotten = get_demo_expr().get("vec").unwrap();
-        assert_eq!(gotten, Expression::list(vec![
-            Expression::presence("bird".to_string(), LexicalSpan::new(0, 0)),
-            Expression::presence("dog".to_string(), LexicalSpan::new(0, 0)),
-        ], LexicalSpan::new(0, 0)))
-    }
-
     #[test]
     fn pretty_harder() {
         let make_pretty = Expression::list(vec![
-            Expression::binding("run_name".to_string(), Expression::presence("first".to_string(), LexicalSpan::new(0, 0)), LexicalSpan::new(0, 0)),
+            Expression::binding("run_name".to_string(), Expression::presence("first".to_string())),
             Expression::binding("names_in_run".to_string(), Expression::list(vec![
-                Expression::list(vec![Expression::presence("HandMade".to_string(), LexicalSpan::new(0, 0)), Expression::presence("Ethan".to_string(), LexicalSpan::new(0, 0))], LexicalSpan::new(0, 0)),
-                Expression::list(vec![Expression::presence("HandMade".to_string(), LexicalSpan::new(0, 0)), Expression::presence("James".to_string(), LexicalSpan::new(0, 0))], LexicalSpan::new(0, 0)),
-                Expression::list(vec![Expression::presence("Generated".to_string(), LexicalSpan::new(0, 0)), Expression::presence("SDKJLHF".to_string(), LexicalSpan::new(0, 0))], LexicalSpan::new(0, 0)),
-                Expression::list(vec![Expression::presence("Generated".to_string(), LexicalSpan::new(0, 0)), Expression::presence("Kerflooble".to_string(), LexicalSpan::new(0, 0))], LexicalSpan::new(0, 0)),
-            ], LexicalSpan::new(0, 0)), LexicalSpan::new(0, 0)),
-            Expression::binding("count".to_string(), Expression::presence("2".to_string(), LexicalSpan::new(0, 0)), LexicalSpan::new(0, 0))
-        ], LexicalSpan::new(0, 0));
+                Expression::list(vec![Expression::presence("HandMade".to_string()), Expression::presence("Ethan".to_string())]),
+                Expression::list(vec![Expression::presence("HandMade".to_string()), Expression::presence("James".to_string())]),
+                Expression::list(vec![Expression::presence("Generated".to_string()), Expression::presence("SDKJLHF".to_string())]),
+                Expression::list(vec![Expression::presence("Generated".to_string()), Expression::presence("Kerflooble".to_string())]),
+            ])),
+            Expression::binding("count".to_string(), Expression::presence("2".to_string()))
+        ]);
 
         assert_eq!(make_pretty.pretty(),
 "(\n\trun_name = first
