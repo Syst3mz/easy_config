@@ -93,6 +93,14 @@ impl ExpressionData {
     pub fn is_list(&self) -> bool {
         matches!(self, List(_, _))
     }
+    
+    pub fn name_of_kind(&self) -> String {
+        match self {
+            Presence(_, _) => "Presence",
+            BindingExpr(_) => "Binding",
+            List(_, _) => "List"
+        }.to_string()
+    }
 }
 
 #[derive(Debug, Clone,Ord, PartialOrd, Eq, PartialEq)]

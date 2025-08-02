@@ -1,3 +1,2 @@
 pub trait Describe {
-    fn describe(&self) -> String;
-}
+    fn describe(&self) -> String;}

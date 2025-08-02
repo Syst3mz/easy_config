@@ -76,7 +76,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn emit_multi_char_token(&mut self, first_char: char, starting_index: usize) -> Token {
-        if first_char.is_numeric() {
+        if first_char.is_numeric() || first_char == '-' {
             let remainder = self
                 .take_chars_while(|c| potentially_numeric(c))
                 .iter()

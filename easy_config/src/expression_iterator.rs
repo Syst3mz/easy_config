@@ -20,6 +20,10 @@ impl ExpressionIterator {
             spans: vec![],
         }
     }
+    
+    pub fn finished(&self) -> bool {
+        self.len() == 0
+    }
     pub fn rewind(&mut self, by: usize) {
         if by == 0 {
             return
@@ -37,6 +41,20 @@ impl ExpressionIterator {
             LexicalSpan::new(len_of_text - 1, len_of_text),
             source_text
         ))
+    }
+    
+    pub fn minimized_next_or_err(&mut self, source_text: impl AsRef<str>) -> Result<Expression, SerializationError> {
+        self.next_or_err(source_text).map(|x| x.minimized())
+    }
+    pub fn next_list_or_err(&mut self, source_text: impl AsRef<str>) -> Result<Expression, SerializationError> {
+        let source_text = source_text.as_ref();
+        let expr = self.next_or_err(source_text)?;
+        let span = expr.span();
+        if !expr.is_list() {
+            return Err(SerializationError::on_span(Kind::ExpectedList(expr), span, source_text))
+        }
+        
+        Ok(expr)
     }
 
     pub fn update_span(&mut self, span: LexicalSpan) {

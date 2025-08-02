@@ -2,10 +2,9 @@ pub mod primitives;
 pub mod tuples;
 pub mod serialization_error;
 pub mod collections;
-pub mod serialize_enum;
+pub mod deserialize_enum;
 pub mod option_span_combine;
 pub mod option;
-mod enum_helpers;
 
 use std::path::Path;
 use crate::expression::Expression;
@@ -62,23 +61,28 @@ impl<T: Default + Config> DefaultConfig for T {}
 #[cfg(test)]
 mod tests {
     use crate::parser::Parser;
-    use crate::serialization::enum_helpers::get_discriminant_lowercased;
     use super::*;
 
     #[derive(Debug, PartialEq)]
     enum Address {
         None,
         IpV4(String),
-        Index(u32)
+        Index(u32, i32)
     }
 
     impl Address {
-        fn deserialize_fields(discriminant: &str, iter: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<Self, SerializationError> {
+        fn deserialize_enum(discriminant: &str, iter: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<Self, SerializationError> {
             let source_text = source_text.as_ref();
             match discriminant {
-                "none" => Ok(Address::None),
-                "ipv4" => Ok(Address::IpV4(String::deserialize(iter, source_text)?)),
-                "index" => Ok(Address::Index(u32::deserialize(iter, source_text)?)),
+                "None" => Ok(Address::None),
+                "IpV4" => Ok(Address::IpV4(String::deserialize(iter, source_text)?)),
+                "Index" => {
+                    let mut list = iter.next_or_err(source_text)?.into_iter();
+                    Ok(Address::Index(
+                        u32::deserialize(&mut list, source_text)?,
+                        i32::deserialize(&mut list, source_text)?
+                    ))
+                },
                 _ => unreachable!()
             }
         }
@@ -89,7 +93,7 @@ mod tests {
             match self {
                 Address::None => Expression::presence("None"),
                 Address::IpV4(s) => Expression::list(vec![Expression::presence("IpV4"), Expression::list(vec![Expression::presence(s.clone())])]),
-                Address::Index(u) => Expression::list(vec![Expression::presence("Index"), Expression::list(vec![Expression::presence(*u)])])
+                Address::Index(u, i) => Expression::list(vec![Expression::presence("Index"), Expression::list(vec![Expression::presence(*u), Expression::presence(*i)])])
             }
         }
 
@@ -97,21 +101,12 @@ mod tests {
         where
             Self: Sized
         {
-            let source_text = source_text.as_ref();
-            let options = &["none", "ipv4", "index"];
-            let discriminant = get_discriminant_lowercased(expression_iterator, options, source_text)?;
-
-            // hack to allow prefixed exprs
-            if let Some(expr) = expression_iterator.peek() {
-                if expr.is_list() {
-                    let mut iter = expression_iterator.next().unwrap().into_iter();
-                    let ret = Self::deserialize_fields(discriminant.as_str(), &mut iter, source_text);
-                    expression_iterator.rewind(dbg!(iter.len()));
-                    return ret
-                }
-            }
-
-            Self::deserialize_fields(discriminant.as_str(), expression_iterator, source_text)
+            deserialize_enum::deserialize_enum(
+                expression_iterator,
+                &["None", "IpV4", "Index"],
+                source_text,
+                |discriminant, expression_iterator, source_text| Self::deserialize_enum(discriminant, expression_iterator, source_text)
+            )
         }
     }
     
@@ -149,12 +144,12 @@ mod tests {
             addresses: vec![
                 Address::None,
                 Address::IpV4("127.0.0.1".to_string()),
-                Address::Index(3),
+                Address::Index(3, -1),
             ],
         }
     }
 
-    const EXPECTED: &'static str = "(name = cat addresses = (None (IpV4 (127.0.0.1)) (Index (3))))";
+    const EXPECTED: &'static str = "(name = cat addresses = (None (IpV4 (127.0.0.1)) (Index (3 -1))))";
     #[test]
     fn serialize() {
         let d = demo();

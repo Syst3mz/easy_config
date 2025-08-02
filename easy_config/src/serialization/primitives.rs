@@ -16,7 +16,7 @@ macro_rules! config {
 
             fn deserialize(exprs: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<Self, SerializationError> {
                 let source_text = source_text.as_ref();
-                let expr = exprs.next_or_err(source_text)?;
+                let expr = exprs.minimized_next_or_err(source_text)?;
                 let span = expr.span();
                 match expr.data {
                     ExpressionData::Presence(p, _) => match p {
@@ -39,7 +39,7 @@ macro_rules! config {
 
             fn deserialize(exprs: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<Self, SerializationError> {
                 let source_text = source_text.as_ref();
-                let expr = exprs.next_or_err(source_text)?;
+                let expr = exprs.minimized_next_or_err(source_text)?;
                 let span = expr.span();
                 match expr.data {
                     ExpressionData::Presence(p, _) => match p {
@@ -83,6 +83,21 @@ fn escape_string(text: impl AsRef<str>) -> String {
 
     text.to_string()
 }
+
+fn deserialize_string(exprs: &mut ExpressionIterator, source_text: &str) -> Result<String, SerializationError> {
+    let mut span = None;
+    for expr in exprs {
+        span.combine(expr.span());
+
+        let ExpressionData::Presence(_, _) = &expr.data else {
+            return Err(SerializationError::on_span(Kind::ExpectedPresence(expr), span.unwrap(), source_text))
+                .contextualize("Error while deserializing a String");
+        };
+    }
+
+    let span = span.unwrap();
+    Ok(source_text[span.start()..span.end()].to_string())
+}
 impl Config for String {
     fn serialize(&self) -> Expression {
         Expression::list(
@@ -97,19 +112,17 @@ impl Config for String {
         Self: Sized
     {
         let source_text = source_text.as_ref();
-        let mut span = None;
 
-        for expr in exprs {
-            let ExpressionData::Presence(_, s) = &expr.data else {
-                return Err(SerializationError::on_span(Kind::ExpectedPresence(expr), span.unwrap(), source_text))
-                    .contextualize("Error while deserializing a String");
-            };
-
-            span.combine(*s)
+        if exprs.finished() {
+            return Err(SerializationError::end_of_input(source_text))    
         }
 
-        let span = span.unwrap();
-        Ok(source_text[span.start()..span.end()].to_string())
+        let peeked = exprs.peek().unwrap();
+        if peeked.is_list() {
+            deserialize_string(&mut exprs.next().unwrap().into_iter(), source_text)
+        } else {
+            deserialize_string(exprs, source_text)
+        }
     }
 }
 
