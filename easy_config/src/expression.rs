@@ -147,8 +147,8 @@ impl Expression {
         )
     }
 
-    pub fn with_comment(mut self, comment: String) -> Self {
-        self.comment = Some(comment);
+    pub fn with_comment(mut self, comment: impl AsRef<str>) -> Self {
+        self.comment = Some(comment.as_ref().to_string());
         self
     }
     
