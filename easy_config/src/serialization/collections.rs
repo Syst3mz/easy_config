@@ -4,14 +4,14 @@ use crate::config_error::Contextualize;
 use crate::expression::{Expression, ExpressionData};
 use crate::expression_iterator::ExpressionIterator;
 use crate::lexical_span::LexicalSpan;
-use crate::serialization::Config;
+use crate::serialization::EasyConfig;
 use crate::serialization::serialization_error::{Kind, SerializationError};
 
-fn serialize_linear<'a, T: Config>(elements: impl Iterator<Item=&'a T>) -> Expression {
+fn serialize_linear<'a, T: EasyConfig>(elements: impl Iterator<Item=&'a T>) -> Expression {
     Expression::list(elements.map(|x| x.serialize()).collect()).minimized()
 }
 
-fn deserialize_linear<'a, T: Config>(elements: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<Vec<T>, SerializationError> {
+fn deserialize_linear<'a, T: EasyConfig>(elements: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<Vec<T>, SerializationError> {
     let source_text = source_text.as_ref();
 
     if T::PASSTHROUGH {
@@ -28,7 +28,7 @@ fn deserialize_linear<'a, T: Config>(elements: &mut ExpressionIterator, source_t
     }))
 }
 
-impl<T: Config> Config for Vec<T> {
+impl<T: EasyConfig> EasyConfig for Vec<T> {
     fn serialize(&self) -> Expression {
         serialize_linear(self.iter())
     }
@@ -39,7 +39,7 @@ impl<T: Config> Config for Vec<T> {
             .contextualize(format!("Error while deserializing Vec<{}>", any::type_name::<T>()))
     }
 }
-impl<T: Config, const N: usize> Config for [T; N] {
+impl<T: EasyConfig, const N: usize> EasyConfig for [T; N] {
     fn serialize(&self) -> Expression {
         serialize_linear(self.iter())
     }
@@ -65,7 +65,7 @@ impl<T: Config, const N: usize> Config for [T; N] {
     }
 }
 
-fn deserialize_hashmap_binding<T: Config>(expression: Expression, source_text: impl AsRef<str>) -> Result<(String, T), SerializationError> {
+fn deserialize_hashmap_binding<T: EasyConfig>(expression: Expression, source_text: impl AsRef<str>) -> Result<(String, T), SerializationError> {
     let span = expression.span();
     let ExpressionData::BindingExpr(binding) = expression.data else {
         return Err(SerializationError::on_span(
@@ -77,7 +77,7 @@ fn deserialize_hashmap_binding<T: Config>(expression: Expression, source_text: i
 
     Ok((binding.name, T::deserialize(&mut binding.value.into_iter(), source_text)?))
 }
-impl<T: Config> Config for HashMap<String, T> {
+impl<T: EasyConfig> EasyConfig for HashMap<String, T> {
     fn serialize(&self) -> Expression {
         Expression::list(
             self.iter()

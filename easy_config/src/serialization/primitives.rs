@@ -2,14 +2,14 @@ use crate::config_error::Contextualize;
 use crate::expression::{Atom, Expression, ExpressionData};
 use crate::expression_iterator::ExpressionIterator;
 use crate::lexer;
-use crate::serialization::{Config};
+use crate::serialization::{EasyConfig};
 use crate::serialization::Kind;
 use crate::serialization::option_span_combine::OptionSpanCombine;
 use crate::serialization::serialization_error::SerializationError;
 
 macro_rules! config {
     ($ty: ty) => {
-        impl Config for $ty {
+        impl EasyConfig for $ty {
             fn serialize(&self) -> Expression {
                 Expression::presence(*self)
             }
@@ -32,7 +32,7 @@ macro_rules! config {
     };
 
     ($ty: ty, non_numeric) => {
-        impl Config for $ty {
+        impl EasyConfig for $ty {
             fn serialize(&self) -> Expression {
                 Expression::presence(self.to_string())
             }
@@ -98,7 +98,7 @@ fn deserialize_string(exprs: &mut ExpressionIterator, source_text: &str) -> Resu
     let span = span.unwrap();
     Ok(source_text[span.start()..span.end()].to_string())
 }
-impl Config for String {
+impl EasyConfig for String {
     fn serialize(&self) -> Expression {
         Expression::list(
             self.split(" ")

@@ -12,7 +12,7 @@ use crate::expression_iterator::ExpressionIterator;
 use crate::parser::Parser;
 use crate::serialization::serialization_error::{Kind, SerializationError};
 
-pub trait Config: 'static {
+pub trait EasyConfig: 'static {
     /// PASSTHROUGH is true for types which need access to their parent's iterators for
     /// deserialization. This is mostly enums, but is exposed for anything else.
     const PASSTHROUGH: bool = false;
@@ -27,7 +27,7 @@ pub enum LoadMode {
 }
 
 /// Any structure implementing both `Default` and `Config` automatically implements this trait.
-pub trait DefaultConfig: Config + Default {
+pub trait DefaultConfig: EasyConfig + Default {
     /// This function always returns a config (if successful).
     /// If a configuration file is both present (at the specified path) and valid
     /// (can be interpreted without error), then that configuration is returned. If the config is
@@ -56,7 +56,7 @@ pub trait DefaultConfig: Config + Default {
     }
 }
 
-impl<T: Default + Config> DefaultConfig for T {}
+impl<T: Default + EasyConfig> DefaultConfig for T {}
 
 #[cfg(test)]
 mod tests {
@@ -87,7 +87,7 @@ mod tests {
             }
         }
     }
-    impl Config for Address {
+    impl EasyConfig for Address {
         const PASSTHROUGH: bool = true;
         fn serialize(&self) -> Expression {
             match self {
@@ -116,7 +116,7 @@ mod tests {
         addresses: Vec<Address>,
     }
 
-    impl Config for Demo {
+    impl EasyConfig for Demo {
         fn serialize(&self) -> Expression {
             Expression::list(vec![
                 Expression::binding("name", self.name.serialize()),

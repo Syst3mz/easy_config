@@ -1,6 +1,6 @@
 use crate::expression_iterator::ExpressionIterator;
 use crate::lexical_span::LexicalSpan;
-use crate::serialization::{Config};
+use crate::serialization::{EasyConfig};
 use crate::serialization::Expression;
 use crate::serialization::serialization_error::{Kind, SerializationError};
 use crate::serialization::option_span_combine::OptionSpanCombine;
@@ -8,7 +8,7 @@ use crate::serialization::option_span_combine::OptionSpanCombine;
 
 macro_rules! impl_tuple {
     ($($typ:ident),*) => {
-        impl<$( $typ: Config ),*> Config for ($($typ,)*) {
+        impl<$( $typ: EasyConfig ),*> EasyConfig for ($($typ,)*) {
             #[allow(non_snake_case)]
             fn serialize(&self) -> Expression {
                 let ($(ref $typ),*) = *self;

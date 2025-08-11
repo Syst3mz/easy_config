@@ -1,11 +1,11 @@
 use crate::config_error::Contextualize;
 use crate::expression::{Atom, Expression, ExpressionData};
 use crate::expression_iterator::ExpressionIterator;
-use crate::serialization::Config;
+use crate::serialization::EasyConfig;
 use crate::serialization::serialization_error::{Kind, SerializationError};
 use crate::serialization::serialization_error::Kind::ExpectedList;
 
-impl<T: Config> Config for Option<T> {
+impl<T: EasyConfig> EasyConfig for Option<T> {
     fn serialize(&self) -> Expression {
         match self {
             None => Expression::presence("None".to_string()),
