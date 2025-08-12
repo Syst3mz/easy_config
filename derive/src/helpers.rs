@@ -73,6 +73,12 @@ fn serialize_variant_with_no_fields() -> proc_macro2::TokenStream {
     }
 }
 
+fn destructure_unnamed(fields_unnamed: &FieldsUnnamed) -> Vec<Ident> {
+    (0..fields_unnamed.unnamed.len())
+        .map(|i| syn::Ident::new(&format!("f{}", i), proc_macro2::Span::call_site()))
+        .collect()
+}
+
 fn prepend_arm(enum_name: &Ident, variant: &Variant, to: impl ToTokens) -> proc_macro2::TokenStream {
     let variant_name = &variant.ident;
 
@@ -84,9 +90,7 @@ fn prepend_arm(enum_name: &Ident, variant: &Variant, to: impl ToTokens) -> proc_
             quote! { { #( #bindings ),* } }
         }
         Fields::Unnamed(fields_unnamed) => {
-            let bindings: Vec<Ident> = (0..fields_unnamed.unnamed.len())
-                .map(|i| syn::Ident::new(&format!("f{}", i), proc_macro2::Span::call_site()))
-                .collect();
+            let bindings = destructure_unnamed(fields_unnamed);
             quote! { ( #( #bindings ),* ) }
         }
         Fields::Unit => quote! {},
@@ -97,11 +101,22 @@ fn prepend_arm(enum_name: &Ident, variant: &Variant, to: impl ToTokens) -> proc_
     }
 }
 
+fn serialize_unnamed_variant(fields_unnamed: &FieldsUnnamed) -> proc_macro2::TokenStream {
+    let bindings = destructure_unnamed(fields_unnamed);
+
+    let binding = quote! { let structured = ( #( #bindings ),* ) };
+    let fields = serialize_unnamed_fields(quote! {structured.}, fields_unnamed);
+
+    quote! {{
+                #binding;
+                #fields
+            }}
+}
 pub fn serialize_variant_arm(enum_name: &Ident, variant: &Variant) -> proc_macro2::TokenStream {
 
     let fields = match &variant.fields {
         Fields::Named(named) => serialize_named_fields(quote! {}, named),
-        Fields::Unnamed(unnamed) => serialize_unnamed_fields(quote! {}, unnamed),
+        Fields::Unnamed(unnamed) => serialize_unnamed_variant(unnamed),
         Fields::Unit => serialize_variant_with_no_fields()
     };
 
