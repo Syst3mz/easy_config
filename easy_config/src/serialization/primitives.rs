@@ -76,13 +76,16 @@ config!(bool, non_numeric);
 config!(char, non_numeric);
 
 fn escape_string(text: impl AsRef<str>) -> String {
-    let mut text = text.as_ref().to_string();
-    for stopping_char in lexer::STOPPING_CHARS {
-        text = text.replace(&format!("{}", stopping_char), &format!("\\{}", stopping_char))
+    let mut escaped = String::with_capacity(text.as_ref().len());
+    for ch in text.as_ref().chars() {
+        if lexer::STOPPING_CHARS.contains(&ch) {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
     }
-
-    text.to_string()
+    escaped
 }
+
 
 fn deserialize_string(exprs: &mut ExpressionIterator, source_text: &str) -> Result<String, SerializationError> {
     let mut span = None;
@@ -101,7 +104,7 @@ fn deserialize_string(exprs: &mut ExpressionIterator, source_text: &str) -> Resu
 impl EasyConfig for String {
     fn serialize(&self) -> Expression {
         Expression::list(
-            self.split(" ")
+            self.split_whitespace()
                 .map(|x| Expression::presence(escape_string(x)))
                 .collect::<Vec<Expression>>(),
         ).minimized()
@@ -160,5 +163,19 @@ mod tests {
         let mut parsed = parsed.into_iter();
         let got = String::deserialize(&mut parsed.next().unwrap().into_iter(), &expected).unwrap();
         assert_eq!(got, "hi there")
+    }
+
+    #[test]
+    fn deserialize_bound_string_with_space() {
+        let content = "hi there";
+        let source = format!("x = ({})", content);
+        let parsed = Parser::new(&source).parse().unwrap();
+        let mut parsed = parsed.into_iter();
+        let ExpressionData::BindingExpr(b) = parsed.next().unwrap().data else {panic!("Expected binding")};
+        if b.name != "x" {
+            panic!("expected x but got {}", b.name)
+        }
+        let got = String::deserialize(&mut b.value.into_iter(), &source).unwrap();
+        assert_eq!(got, content)
     }
 }

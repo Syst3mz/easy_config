@@ -1,6 +1,7 @@
 use proc_macro2::Ident;
 use quote::{quote, ToTokens};
 use syn::{Field, Fields, FieldsNamed, FieldsUnnamed, Variant};
+use crate::shared::comma_separated_list;
 
 pub fn serialize_named_field(accessor: impl ToTokens, field: &Field) -> proc_macro2::TokenStream {
     let field_ident = field.ident.as_ref().unwrap();
@@ -57,12 +58,10 @@ pub fn append_comment(uncommented: proc_macro2::TokenStream, field: &Field) -> p
     }
 }
 
-pub fn serialize_into_list(entries: impl IntoIterator<Item=impl ToTokens>) -> proc_macro2::TokenStream {
-    let entries = entries.into_iter();
+pub fn serialize_into_list<I: IntoIterator<Item = impl ToTokens>>(entries: I) -> proc_macro2::TokenStream {
+    let entries = comma_separated_list(entries);
     quote! {
-        ::easy_config::expression::Expression::list(vec![
-            #(#entries),*
-        ])
+        ::easy_config::expression::Expression::list(vec![ #entries ])
     }
 }
 

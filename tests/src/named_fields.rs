@@ -1,6 +1,6 @@
 use easy_config_derive::EasyConfig;
 
-#[derive(EasyConfig)]
+#[derive(EasyConfig, PartialEq, Debug, Clone)]
 struct NamedFields {
     x: String,
     #[comment("My favorite numbers in order.")]
@@ -18,6 +18,7 @@ fn testing() -> NamedFields {
 #[cfg(test)]
 mod tests {
     use easy_config::expression::Expression;
+    use easy_config::parser::Parser;
     use super::*;
 
     #[test]
@@ -39,6 +40,11 @@ mod tests {
 
     #[test]
     fn deserialize() {
-        todo!()
+        let exprs = testing().serialize();
+        let text = exprs.uncomented_dump();
+        let parsed = Parser::new(&text).parse().unwrap().into_iter().next().unwrap();
+        println!("{}", text);
+        let deserialized = NamedFields::deserialize(&mut parsed.into_iter(), text).expect("should deserialize");
+        assert_eq!(deserialized, testing());
     }
 }

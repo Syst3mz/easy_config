@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::iter::Peekable;
 use crate::serialization::option_span_combine::OptionSpanCombine;
-use crate::expression::{Binding, Expression};
+use crate::expression::{Atom, Binding, Expression};
 use crate::expression::ExpressionData::{BindingExpr, List, Presence};
 use crate::lexical_span::LexicalSpan;
 use crate::serialization::serialization_error::{Kind, SerializationError};
@@ -10,6 +11,7 @@ pub struct ExpressionIterator {
     inner: Peekable<std::vec::IntoIter<Expression>>,
     spans: Vec<LexicalSpan>,
 }
+
 impl ExpressionIterator {
     pub fn new(expr: Expression) -> Self {
         Self {
@@ -98,6 +100,39 @@ impl ExpressionIterator {
     }
     pub fn peek(&mut self) -> Option<&Expression> {
         self.inner.peek()
+    }
+    pub fn eat_presence_if_present(&mut self, value: impl Into<Atom>) -> bool {
+        let Some(peek) = self.peek() else { return false };
+        let Presence(peek, _) = &peek.data else { return false };
+        let res = peek == &value.into();
+        if res {
+            self.next();
+        }
+
+        res
+    }
+
+    pub fn convert_binding_list_to_hashmap_of_values(&mut self, source_text: impl AsRef<str>) -> Result<(HashMap<String, Expression>, LexicalSpan), SerializationError> {
+        let source_text = source_text.as_ref();
+        let mut acc = HashMap::new();
+        let mut outer_span = None;
+
+        for item in self {
+            let span = item.span();
+            let BindingExpr(binding) = item.data else {
+                return Err(SerializationError::on_span(
+                    Kind::ExpectedBinding(item), span, source_text)
+                    .contextualize("Expected a binding list to be comprised of exclusively bindings.")
+                );
+            };
+            outer_span.combine(span);
+
+            acc.insert(binding.name, *binding.value);
+        }
+
+        dbg!(&acc);
+
+        Ok((acc, outer_span.ok_or(SerializationError::end_of_input(source_text))?))
     }
 }
 

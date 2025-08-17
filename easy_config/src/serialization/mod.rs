@@ -6,9 +6,11 @@ pub mod deserialize_enum;
 pub mod option_span_combine;
 pub mod option;
 
+use std::collections::HashMap;
 use std::path::Path;
 use crate::expression::Expression;
 use crate::expression_iterator::ExpressionIterator;
+use crate::lexical_span::LexicalSpan;
 use crate::parser::Parser;
 use crate::serialization::serialization_error::{Kind, SerializationError};
 
@@ -58,6 +60,21 @@ pub trait DefaultConfig: EasyConfig + Default {
 
 impl<T: Default + EasyConfig> DefaultConfig for T {}
 
+
+pub fn deserialize_field_from_map_or_error<T: EasyConfig>(field: impl AsRef<str>, mapping: &mut HashMap<String, Expression>, span: LexicalSpan, source_text: impl AsRef<str>) -> Result<T, SerializationError> {
+    let field = field.as_ref();
+    let source_text = source_text.as_ref();
+
+    let value =  mapping
+        .remove(field)
+        .ok_or(SerializationError::on_span(Kind::MissingField(field.to_string()), span, source_text))?;
+
+    T::deserialize(
+       &mut value.into_iter(),
+       source_text
+    )
+
+}
 #[cfg(test)]
 mod tests {
     use crate::parser::Parser;
@@ -119,6 +136,7 @@ mod tests {
     impl EasyConfig for Demo {
         fn serialize(&self) -> Expression {
             Expression::list(vec![
+                Expression::presence("Demo"),
                 Expression::binding("name", self.name.serialize()),
                 Expression::binding("addresses", self.addresses.serialize())
             ])
@@ -129,6 +147,7 @@ mod tests {
             Self: Sized,
         {
             let source_text = source_text.as_ref();
+            exprs.eat_presence_if_present("Demo");
 
             Ok(Self {
                 name: String::deserialize(&mut exprs.find_binding("name", source_text)?.value.into_iter(), source_text)?,
@@ -149,7 +168,7 @@ mod tests {
         }
     }
 
-    const EXPECTED: &'static str = "(name = cat addresses = (None (IpV4 (127.0.0.1)) (Index (3 -1))))";
+    const EXPECTED: &'static str = "(Demo name = cat addresses = (None (IpV4 (127.0.0.1)) (Index (3 -1))))";
     #[test]
     fn serialize() {
         let d = demo();

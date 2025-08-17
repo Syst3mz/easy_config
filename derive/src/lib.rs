@@ -1,9 +1,12 @@
-mod helpers;
+mod serialize_helpers;
+mod deserialize_helpers;
+mod shared;
 
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DataEnum, DataStruct, DeriveInput};
-use crate::helpers::{serialize_named_fields, serialize_unnamed_fields, serialize_variant_arm};
+use crate::deserialize_helpers::{deserialize_named_fields, deserialize_unit_struct};
+use crate::serialize_helpers::{serialize_named_fields, serialize_unnamed_fields, serialize_variant_arm};
 
 fn serialize_unit_field() -> proc_macro2::TokenStream {
     quote! { Expression::list(vec![]) }
@@ -22,6 +25,12 @@ fn generate_config_for_struct(input: &DeriveInput, data: &DataStruct) -> TokenSt
 
     let name_as_string = struct_name.to_string();
 
+    let deserialize_body = match &data.fields {
+        syn::Fields::Named(fields_named) => deserialize_named_fields(fields_named, &name_as_string),
+        syn::Fields::Unnamed(fields_unnamed) => quote! {todo!()},
+        syn::Fields::Unit => deserialize_unit_struct(struct_name)
+    };
+
     quote! {
         use easy_config::serialization::EasyConfig;
         impl EasyConfig for #struct_name {
@@ -32,7 +41,9 @@ fn generate_config_for_struct(input: &DeriveInput, data: &DataStruct) -> TokenSt
             }
 
             fn deserialize(exprs: &mut ::easy_config::expression_iterator::ExpressionIterator, source_text: impl AsRef<str>) -> Result<Self, ::easy_config::serialization::serialization_error::SerializationError> {
-                todo!("deserialize for struct {}", stringify!(#struct_name));
+                let source_text = source_text.as_ref();
+                exprs.eat_presence_if_present(stringify!(#struct_name));
+                #deserialize_body
             }
         }
     }.into()
@@ -53,6 +64,9 @@ fn generate_config_for_enum(input: &DeriveInput, data: &DataEnum) -> TokenStream
             }
 
             fn deserialize(exprs: &mut ::easy_config::expression_iterator::ExpressionIterator, source_text: impl AsRef<str>) -> Result<Self, ::easy_config::serialization::serialization_error::SerializationError> {
+                let source_text = source_text.as_ref();
+                exprs.eat_presence_if_present(stringify!(#enum_name));
+
                 todo!("deserialize for enum {}", stringify!(#enum_name));
             }
         }
