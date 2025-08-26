@@ -2,7 +2,6 @@ pub mod primitives;
 pub mod tuples;
 pub mod serialization_error;
 pub mod collections;
-pub mod deserialize_enum;
 pub mod option_span_combine;
 pub mod option;
 
@@ -77,6 +76,7 @@ pub fn deserialize_field_from_map_or_error<T: EasyConfig>(field: impl AsRef<str>
 }
 #[cfg(test)]
 mod tests {
+    use crate::config_error::Contextualize;
     use crate::parser::Parser;
     use super::*;
 
@@ -87,23 +87,6 @@ mod tests {
         Index(u32, i32)
     }
 
-    impl Address {
-        fn deserialize_enum(discriminant: &str, iter: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<Self, SerializationError> {
-            let source_text = source_text.as_ref();
-            match discriminant {
-                "None" => Ok(Address::None),
-                "IpV4" => Ok(Address::IpV4(String::deserialize(iter, source_text)?)),
-                "Index" => {
-                    let mut list = iter.next_or_err(source_text)?.into_iter();
-                    Ok(Address::Index(
-                        u32::deserialize(&mut list, source_text)?,
-                        i32::deserialize(&mut list, source_text)?
-                    ))
-                },
-                _ => unreachable!()
-            }
-        }
-    }
     impl EasyConfig for Address {
         const PASSTHROUGH: bool = true;
         fn serialize(&self) -> Expression {
@@ -118,12 +101,30 @@ mod tests {
         where
             Self: Sized
         {
-            deserialize_enum::deserialize_enum(
-                expression_iterator,
-                &["None", "IpV4", "Index"],
-                source_text,
-                |discriminant, expression_iterator, source_text| Self::deserialize_enum(discriminant, expression_iterator, source_text)
-            )
+            let source_text = source_text.as_ref();
+            let (discriminant, fields) = expression_iterator
+                .extract_enum(source_text)
+                .contextualize("Unable to deserialize enum Address since we can't extract a discriminant and a argument list")?;
+            let span = expression_iterator.span().unwrap();
+            const OPTIONS: &'static [&'static str] = &["None", "IpV4", "Index"];
+            let mut fields = fields.into_iter();
+
+            match discriminant.as_str() {
+                "None" => Ok(Self::None),
+                "IpV4" => Ok(Self::IpV4(fields
+                    .deserialize_next(source_text)
+                    .contextualize("Unable to deserialize IpV4 field")?)
+                ),
+                "Index" => Ok(Self::Index(
+                    fields
+                        .deserialize_next(source_text)
+                        .contextualize("Unable to deserialize Index 0 field")?,
+                    fields
+                        .deserialize_next(source_text)
+                        .contextualize("Unable to deserialize Index 1 field")?
+                )),
+                _ => Err(SerializationError::on_span(Kind::ExpectedDiscriminant(discriminant, OPTIONS), span, source_text)),
+            }
         }
     }
     
@@ -147,7 +148,7 @@ mod tests {
             Self: Sized,
         {
             let source_text = source_text.as_ref();
-            exprs.eat_presence_if_present("Demo");
+            exprs.eat_presence_if_present_and_matching("Demo");
 
             Ok(Self {
                 name: String::deserialize(&mut exprs.find_binding("name", source_text)?.value.into_iter(), source_text)?,

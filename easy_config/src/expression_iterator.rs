@@ -4,6 +4,7 @@ use crate::serialization::option_span_combine::OptionSpanCombine;
 use crate::expression::{Atom, Binding, Expression};
 use crate::expression::ExpressionData::{BindingExpr, List, Presence};
 use crate::lexical_span::LexicalSpan;
+use crate::serialization::EasyConfig;
 use crate::serialization::serialization_error::{Kind, SerializationError};
 
 #[derive(Debug, Clone)]
@@ -101,7 +102,7 @@ impl ExpressionIterator {
     pub fn peek(&mut self) -> Option<&Expression> {
         self.inner.peek()
     }
-    pub fn eat_presence_if_present(&mut self, value: impl Into<Atom>) -> bool {
+    pub fn eat_presence_if_present_and_matching(&mut self, value: impl Into<Atom>) -> bool {
         let Some(peek) = self.peek() else { return false };
         let Presence(peek, _) = &peek.data else { return false };
         let res = peek == &value.into();
@@ -110,6 +111,32 @@ impl ExpressionIterator {
         }
 
         res
+    }
+
+    pub fn deserialize_next<T: EasyConfig>(&mut self, source_text: impl AsRef<str>) -> Result<T, SerializationError> {
+        let source_text = source_text.as_ref();
+        let next = self.next_or_err(source_text)?;
+        T::deserialize(&mut next.into_iter(), source_text)
+    }
+
+    pub fn extract_enum(&mut self, source_text: impl AsRef<str>) -> Result<(String, Expression), SerializationError> {
+        let source_text = source_text.as_ref();
+        let next = self.next_or_err(source_text)?;
+
+        let mut enum_iter = next.into_iter();
+        let discriminant_expr = enum_iter.next_or_err(source_text)?;
+
+        let Presence(discriminant, discriminant_span) = discriminant_expr.data else {
+            let span = discriminant_expr.span();
+            return Err(SerializationError::on_span(Kind::ExpectedPresence(discriminant_expr), span, source_text))
+        };
+
+        let Atom::Text(discriminant) = discriminant else {
+            return Err(SerializationError::on_span(Kind::ExpectedText(discriminant.to_string()), discriminant_span, source_text))
+        };
+
+
+        Ok((discriminant, enum_iter.next_list_or_err(source_text).unwrap_or(Expression::list(vec![]))))
     }
 
     pub fn convert_binding_list_to_hashmap_of_values(&mut self, source_text: impl AsRef<str>) -> Result<(HashMap<String, Expression>, LexicalSpan), SerializationError> {
@@ -129,8 +156,6 @@ impl ExpressionIterator {
 
             acc.insert(binding.name, *binding.value);
         }
-
-        dbg!(&acc);
 
         Ok((acc, outer_span.ok_or(SerializationError::end_of_input(source_text))?))
     }

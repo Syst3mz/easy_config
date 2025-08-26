@@ -1,10 +1,10 @@
 use easy_config_derive::EasyConfig;
 
-#[derive(EasyConfig)]
+#[derive(EasyConfig, Debug, PartialEq)]
 struct UnnamedFields(
     String,
     #[comment("My favorite numbers in order.")]
-    Vec<u32>
+    Vec<u32>,
 );
 
 #[allow(dead_code)]
@@ -14,9 +14,10 @@ fn testing() -> UnnamedFields {
 
 #[cfg(test)]
 mod tests {
-    use crate::unnamed_fields::testing;
+    use crate::unnamed_fields::{testing, UnnamedFields};
     use easy_config::serialization::EasyConfig;
     use easy_config::expression::Expression;
+    use easy_config::parser::Parser;
 
     #[test]
     fn serialize() {
@@ -36,6 +37,11 @@ mod tests {
 
     #[test]
     fn deserialize() {
-        todo!()
+        let exprs = testing().serialize();
+        let text = exprs.uncomented_dump();
+        let parsed = Parser::new(&text).parse().unwrap().into_iter().next().unwrap();
+        println!("{}", text);
+        let deserialized = UnnamedFields::deserialize(&mut parsed.into_iter(), text).expect("should deserialize");
+        assert_eq!(deserialized, testing());
     }
 }
