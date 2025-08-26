@@ -1,6 +1,6 @@
 [package]
 name = "easy_config_derive"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 
 license = "GPL-3.0"
@@ -15,7 +15,7 @@ keywords = ["config"]
 proc-macro = true
 
 [dependencies]
-syn = { version = "2", features = ["full"] }
+syn = { version = "2"}
 quote = "1.0"
 proc-macro2 = "1.0"
 
