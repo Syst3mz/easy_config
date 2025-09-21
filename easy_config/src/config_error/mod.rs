@@ -1,6 +1,6 @@
 pub mod describe;
 
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use crate::config_error::describe::Describe;
 use crate::lexical_span::LexicalSpan;
 
@@ -57,16 +57,18 @@ impl<Kind> ConfigError<Kind> {
     }
 }
 
+fn get_description<T: Describe>(kind: &T, area: impl AsRef<str>) -> String {
+    let area = area.as_ref();
+    if area.is_empty() {
+        kind.describe()
+    } else {
+        format!("{}\n{}", kind.describe(), area)
+    }
+}
 impl<Kind: Describe> Display for ConfigError<Kind> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", match self {
-            ConfigError::FirstLevelError(kind, area) => {
-                if area.is_empty() {
-                    kind.describe()
-                } else {
-                    format!("{}\n{}", kind.describe(), area)
-                }
-            }
+            ConfigError::FirstLevelError(kind, area) => get_description(kind, area),
             ConfigError::ContextualizedError(context, err) =>
                 format!("{}\n{}", context, err.to_string())
         })
@@ -81,3 +83,5 @@ impl<T, Kind> Contextualize for Result<T, ConfigError<Kind>> {
         self.map_err(|err| err.contextualize(context))
     }
 }
+
+impl<T: Debug+Describe> std::error::Error for ConfigError<T> {}
