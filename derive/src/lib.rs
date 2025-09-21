@@ -4,7 +4,7 @@ mod shared;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DataEnum, DataStruct, DeriveInput};
+use syn::{parse_macro_input, DataEnum, DataStruct, DeriveInput, Generics};
 use crate::deserialize_helpers::{deserialize_variant_arm, deserialize_unit_struct, deserialize_named_struct, deserialize_unnamed_struct};
 use crate::serialize_helpers::{serialize_named_fields, serialize_unnamed_fields, serialize_variant_arm};
 use crate::shared::comma_separated_list;
@@ -13,8 +13,18 @@ fn serialize_unit_field() -> proc_macro2::TokenStream {
     quote! { Expression::list(vec![]) }
 }
 
+fn generate_impl_generics(generics: &Generics) -> (proc_macro2::TokenStream, proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    (
+        quote! { #impl_generics },
+        quote! { #ty_generics },
+        quote! { #where_clause }
+    )
+}
+
 fn generate_config_for_struct(input: &DeriveInput, data: &DataStruct) -> TokenStream {
     let struct_name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = generate_impl_generics(&input.generics);
 
     let _self = quote! { self. };
 
@@ -33,8 +43,7 @@ fn generate_config_for_struct(input: &DeriveInput, data: &DataStruct) -> TokenSt
     };
 
     quote! {
-        use easy_config::serialization::EasyConfig;
-        impl EasyConfig for #struct_name {
+        impl #impl_generics ::easy_config::serialization::EasyConfig for #struct_name #ty_generics #where_clause {
             fn serialize(&self) -> ::easy_config::expression::Expression {
                 let mut body = #serialize_body;
                 body.prepend_into_list(::easy_config::expression::Expression::presence(#struct_name_str));
@@ -53,6 +62,7 @@ fn generate_config_for_struct(input: &DeriveInput, data: &DataStruct) -> TokenSt
 fn generate_config_for_enum(input: &DeriveInput, data: &DataEnum) -> TokenStream {
     let enum_name = &input.ident;
     let enum_name_str = enum_name.to_string();
+    let (impl_generics, ty_generics, where_clause) = generate_impl_generics(&input.generics);
 
     let options = comma_separated_list(data.variants.iter().map(|x| {
         let x = x.ident.to_string();
@@ -74,8 +84,7 @@ fn generate_config_for_enum(input: &DeriveInput, data: &DataEnum) -> TokenStream
     );
 
     quote! {
-        use easy_config::serialization::EasyConfig;
-        impl EasyConfig for #enum_name {
+        impl #impl_generics ::easy_config::serialization::EasyConfig for #enum_name #ty_generics #where_clause {
             fn serialize(&self) -> ::easy_config::expression::Expression {
                 match self {
                     #(#serialize_arms,)*

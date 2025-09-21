@@ -19,6 +19,8 @@ fn testing() -> NamedFields {
 mod tests {
     use easy_config::expression::Expression;
     use easy_config::parser::Parser;
+    use easy_config::serialization::EasyConfig;
+
     use super::*;
 
     #[test]

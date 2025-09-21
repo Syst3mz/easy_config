@@ -9,6 +9,7 @@ struct ServerTest {
 
 #[cfg(test)]
 mod tests {
+    use easy_config::serialization::EasyConfig;
     use easy_config::parser::Parser;
     use super::*;
 

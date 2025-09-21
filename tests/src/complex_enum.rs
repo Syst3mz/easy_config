@@ -13,6 +13,7 @@ enum Complex {
 
 #[cfg(test)]
 mod tests {
+    use easy_config::serialization::EasyConfig;
     use easy_config::expression::Expression;
     use easy_config::parser::Parser;
     use super::*;
