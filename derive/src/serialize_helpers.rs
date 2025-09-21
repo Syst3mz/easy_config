@@ -29,7 +29,7 @@ pub fn serialize_unnamed_fields(prefix: impl ToTokens, fields_unnamed: &FieldsUn
     let entries = fields_unnamed.unnamed.iter().enumerate().map(|(index, field)| {
         let index = syn::Index::from(index);
         append_comment(quote! {
-                    #prefix #index.serialize()
+            #prefix #index.serialize()
         }, field)
     });
 
@@ -101,15 +101,16 @@ fn prepend_arm(enum_name: &Ident, variant: &Variant, to: impl ToTokens) -> proc_
 }
 
 fn serialize_unnamed_variant(fields_unnamed: &FieldsUnnamed) -> proc_macro2::TokenStream {
-    let bindings = destructure_unnamed(fields_unnamed);
+    // Generate direct serialization calls for each field variable (f0, f1, f2, etc.)
+    let entries = (0..fields_unnamed.unnamed.len()).map(|index| {
+        let field_var = syn::Ident::new(&format!("f{}", index), proc_macro2::Span::call_site());
+        let field = &fields_unnamed.unnamed[index];
+        append_comment(quote! {
+            #field_var.serialize()
+        }, field)
+    });
 
-    let binding = quote! { let structured = ( #( #bindings ),* ) };
-    let fields = serialize_unnamed_fields(quote! {structured.}, fields_unnamed);
-
-    quote! {{
-                #binding;
-                #fields
-            }}
+    serialize_into_list(entries)
 }
 pub fn serialize_variant_arm(enum_name: &Ident, variant: &Variant) -> proc_macro2::TokenStream {
 

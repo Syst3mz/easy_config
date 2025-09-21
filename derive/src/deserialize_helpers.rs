@@ -110,6 +110,7 @@ pub fn deserialize_variant_arm(enum_name: &Ident, variant: &Variant) -> proc_mac
 
             quote! {
                 #field_name => {
+                    use ::easy_config::config_error::Contextualize;
                     let mut fields_iter = fields.into_iter();
                     Ok(#enum_name::#variant_ident(#field_list))
                 }
