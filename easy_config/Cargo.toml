@@ -1,6 +1,6 @@
 [package]
 name = "easy_config"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 
 license = "GPL-3.0"
@@ -12,7 +12,7 @@ categories = ["config"]
 keywords = ["config"]
 
 [dependencies]
-easy_config_derive = {path = "../derive", optional = true, version = "^0.3"}
+easy_config_derive = {path = "../derive", optional = true, version = "0.3.1"}
 itertools = "0.14.0"
 
 
