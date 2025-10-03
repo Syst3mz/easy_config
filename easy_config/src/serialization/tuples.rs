@@ -25,7 +25,6 @@ macro_rules! impl_tuple {
                 Self: Sized
             {
                 let source_text = source_text.as_ref();
-
                 let cardnality = <[()]>::len(&[$(impl_tuple!(@sub $typ)),*]);
                 let mut span = None;
                 let mut count = 0;
@@ -42,7 +41,6 @@ macro_rules! impl_tuple {
                                             got: count,
                                         },
                                         span.unwrap_or(LexicalSpan::zeros()),
-                                        source_text
                                 ))?
                                 .into_iter(),
                             source_text

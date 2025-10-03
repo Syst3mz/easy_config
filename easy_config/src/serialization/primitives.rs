@@ -14,17 +14,16 @@ macro_rules! config {
                 Expression::presence(*self)
             }
 
-            fn deserialize(exprs: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<Self, SerializationError> {
-                let source_text = source_text.as_ref();
-                let expr = exprs.minimized_next_or_err(source_text)?;
+            fn deserialize(exprs: &mut ExpressionIterator, _: impl AsRef<str>) -> Result<Self, SerializationError> {
+                let expr = exprs.minimized_next_or_err()?;
                 let span = expr.span();
                 match expr.data {
                     ExpressionData::Presence(p, _) => match p {
-                        Atom::Number(n) => Ok(n.parse()?),
-                        _ => Err(SerializationError::on_span(Kind::ExpectedNumber(p.to_string()), span, source_text))
+                        Atom::Number(n) => Ok(n.parse().map_err(|x| SerializationError::on_span(x, span))?),
+                        _ => Err(SerializationError::on_span(Kind::ExpectedNumber(p.to_string()), span))
                         .contextualize(format!("Error while deserializing a {}", stringify!($ty))),
                     },
-                    _ => Err(SerializationError::on_span(Kind::ExpectedPresence(expr), span, source_text))
+                    _ => Err(SerializationError::on_span(Kind::ExpectedPresence(expr), span))
                     .contextualize(format!("Error while deserializing a {}", stringify!($ty)))
                 }
             }
@@ -37,17 +36,16 @@ macro_rules! config {
                 Expression::presence(self.to_string())
             }
 
-            fn deserialize(exprs: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<Self, SerializationError> {
-                let source_text = source_text.as_ref();
-                let expr = exprs.minimized_next_or_err(source_text)?;
+            fn deserialize(exprs: &mut ExpressionIterator, _: impl AsRef<str>) -> Result<Self, SerializationError> {
+                let expr = exprs.minimized_next_or_err()?;
                 let span = expr.span();
                 match expr.data {
                     ExpressionData::Presence(p, _) => match p {
-                        Atom::Text(t) => Ok(t.parse()?),
-                        _ => Err(SerializationError::on_span(Kind::ExpectedText(p.to_string()), span, source_text))
+                        Atom::Text(t) => Ok(t.parse().map_err(|x| SerializationError::on_span(x, span))?),
+                        _ => Err(SerializationError::on_span(Kind::ExpectedText(p.to_string()), span))
                         .contextualize(format!("Error while deserializing a {}", stringify!($ty))),
                     },
-                    _ => Err(SerializationError::on_span(Kind::ExpectedPresence(expr), span, source_text))
+                    _ => Err(SerializationError::on_span(Kind::ExpectedPresence(expr), span))
                     .contextualize(format!("Error while deserializing a {}", stringify!($ty)))
                 }
             }
@@ -87,13 +85,14 @@ fn escape_string(text: impl AsRef<str>) -> String {
 }
 
 
-fn deserialize_string(exprs: &mut ExpressionIterator, source_text: &str) -> Result<String, SerializationError> {
+fn deserialize_string(exprs: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<String, SerializationError> {
     let mut span = None;
+    let source_text = source_text.as_ref();
     for expr in exprs {
         span.combine(expr.span());
 
         let ExpressionData::Presence(_, _) = &expr.data else {
-            return Err(SerializationError::on_span(Kind::ExpectedPresence(expr), span.unwrap(), source_text))
+            return Err(SerializationError::on_span(Kind::ExpectedPresence(expr), span.unwrap()))
                 .contextualize("Error while deserializing a String");
         };
     }
@@ -115,9 +114,8 @@ impl EasyConfig for String {
         Self: Sized
     {
         let source_text = source_text.as_ref();
-
         if exprs.finished() {
-            return Err(SerializationError::end_of_input(source_text))    
+            return Err(SerializationError::end_of_input())    
         }
 
         let peeked = exprs.peek().unwrap();

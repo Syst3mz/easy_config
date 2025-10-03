@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::iter::Peekable;
-use crate::serialization::option_span_combine::OptionSpanCombine;
-use crate::expression::{Atom, Binding, Expression};
+use crate::binding_map::BindingMap;
+use crate::expression::{Atom, Expression};
 use crate::expression::ExpressionData::{BindingExpr, List, Presence};
 use crate::lexical_span::LexicalSpan;
 use crate::serialization::EasyConfig;
 use crate::serialization::serialization_error::{Kind, SerializationError};
+use crate::serialization::serialization_error::Kind::{ExpectedBinding, ExpectedList, ExpectedPresence, ExpectedText};
 
 #[derive(Debug, Clone)]
 pub struct ExpressionIterator {
@@ -36,25 +37,21 @@ impl ExpressionIterator {
             _ = self.next_back()
         }
     }
-    pub fn next_or_err(&mut self, source_text: impl AsRef<str>) -> Result<Expression, SerializationError> {
-        let source_text = source_text.as_ref();
-        let len_of_text = source_text.len();
+    pub fn next_or_err(&mut self) -> Result<Expression, SerializationError> {
         self.next().ok_or(SerializationError::on_span(
             Kind::ReachedEoi,
-            LexicalSpan::new(len_of_text - 1, len_of_text),
-            source_text
+            self.span().unwrap_or(LexicalSpan::new(0, 1)),
         ))
     }
     
-    pub fn minimized_next_or_err(&mut self, source_text: impl AsRef<str>) -> Result<Expression, SerializationError> {
-        self.next_or_err(source_text).map(|x| x.minimized())
+    pub fn minimized_next_or_err(&mut self) -> Result<Expression, SerializationError> {
+        self.next_or_err().map(|x| x.minimized())
     }
-    pub fn next_list_or_err(&mut self, source_text: impl AsRef<str>) -> Result<Expression, SerializationError> {
-        let source_text = source_text.as_ref();
-        let expr = self.next_or_err(source_text)?;
+    pub fn next_list_or_err(&mut self) -> Result<Expression, SerializationError> {
+        let expr = self.next_or_err()?;
         let span = expr.span();
         if !expr.is_list() {
-            return Err(SerializationError::on_span(Kind::ExpectedList(expr), span, source_text))
+            return Err(SerializationError::on_span(Kind::ExpectedList(expr), span))
         }
         
         Ok(expr)
@@ -68,32 +65,6 @@ impl ExpressionIterator {
 
         let Some(last_span) = self.spans.last() else { return };
         self.spans.push(last_span.combine(span));
-    }
-
-    pub fn find_binding(&mut self, name: impl AsRef<str>, source_text: impl AsRef<str>) -> Result<Binding, SerializationError> {
-        let mut span = None;
-        let name = name.as_ref();
-
-        let self_clone = self.inner.clone();
-
-        let ret = self
-            .find_map(|x| {
-                span.combine(x.span());
-                let BindingExpr(binding) = x.data else { return None };
-                if binding.name != name {
-                    None
-                } else {
-                    Some(binding)
-                }
-            })
-
-            .ok_or(SerializationError::on_span(
-                Kind::MissingField(name.to_string()),
-                span.unwrap(),
-                source_text
-            ));
-        self.inner = self_clone;
-        ret
     }
 
     pub fn span(&self) -> Option<LexicalSpan> {
@@ -114,50 +85,120 @@ impl ExpressionIterator {
     }
 
     pub fn deserialize_next<T: EasyConfig>(&mut self, source_text: impl AsRef<str>) -> Result<T, SerializationError> {
-        let source_text = source_text.as_ref();
-        let next = self.next_or_err(source_text)?;
+        let next = self.next_or_err()?;
         T::deserialize(&mut next.into_iter(), source_text)
     }
 
-    pub fn extract_enum(&mut self, source_text: impl AsRef<str>) -> Result<(String, Expression), SerializationError> {
-        let source_text = source_text.as_ref();
-        let next = self.next_or_err(source_text)?;
+    pub fn extract_enum(&mut self) -> Result<(String, Expression), SerializationError> {
+        let next = self.next_or_err()?;
 
         let mut enum_iter = next.into_iter();
-        let discriminant_expr = enum_iter.next_or_err(source_text)?;
+        let discriminant_expr = enum_iter.next_or_err()?;
 
         let Presence(discriminant, discriminant_span) = discriminant_expr.data else {
             let span = discriminant_expr.span();
-            return Err(SerializationError::on_span(Kind::ExpectedPresence(discriminant_expr), span, source_text))
+            return Err(SerializationError::on_span(Kind::ExpectedPresence(discriminant_expr), span))
         };
 
         let Atom::Text(discriminant) = discriminant else {
-            return Err(SerializationError::on_span(Kind::ExpectedText(discriminant.to_string()), discriminant_span, source_text))
+            return Err(SerializationError::on_span(Kind::ExpectedText(discriminant.to_string()), discriminant_span))
         };
 
 
-        Ok((discriminant, enum_iter.next_list_or_err(source_text).unwrap_or(Expression::list(vec![]))))
+        Ok((discriminant, enum_iter.next_list_or_err().unwrap_or(Expression::list(vec![]))))
     }
 
-    pub fn convert_binding_list_to_hashmap_of_values(&mut self, source_text: impl AsRef<str>) -> Result<(HashMap<String, Expression>, LexicalSpan), SerializationError> {
-        let source_text = source_text.as_ref();
-        let mut acc = HashMap::new();
-        let mut outer_span = None;
+    fn normalize_composite(name: String, exprs: Vec<Expression>, lexical_span: LexicalSpan, comment: Option<String>) -> Expression {
+        Expression::list(vec![
+            Expression::presence(Atom::Text(name)),
+            Expression::new(List(exprs, lexical_span), comment),
+        ])
+    }
 
-        for item in self {
-            let span = item.span();
-            let BindingExpr(binding) = item.data else {
-                return Err(SerializationError::on_span(
-                    Kind::ExpectedBinding(item), span, source_text)
-                    .contextualize("Expected a binding list to be comprised of exclusively bindings.")
-                );
-            };
-            outer_span.combine(span);
+    pub fn normalized_struct(&mut self, name_of_struct: impl AsRef<str>) -> Result<Expression, SerializationError> {
+        let next = self.next_or_err()?;
+        let comment = next.comment;
+        let struct_name = name_of_struct.as_ref();
 
-            acc.insert(binding.name, *binding.value);
+        match next.data {
+            BindingExpr(b) => {
+                let span = b.span;
+                Err(SerializationError::on_span(ExpectedList(Expression::new(BindingExpr(b), None)), span))
+            }
+            List(l, s) => {
+                // Case: already looks like (Demo (...))
+                if let Some(Expression { data: Presence(Atom::Text(ref name), ..), .. }) = l.first() {
+                    if name == struct_name {
+                        return Ok(Expression::new(List(l, s), comment));
+                    }
+                }
+                // Otherwise: wrap into (Demo (...))
+                Ok(Self::normalize_composite(struct_name.to_string(), l, s, comment))
+            }
+            Presence(p, s) => {
+                let Atom::Text(name) = p else {
+                    return Err(SerializationError::on_span(ExpectedText(p.to_string()), s));
+                };
+
+                let next = self.next_or_err()?;
+                let List(list, list_span) = next.data else {
+                    let span = next.span();
+                    return Err(SerializationError::on_span(ExpectedList(next), span));
+                };
+
+                Ok(Self::normalize_composite(name, list, list_span, comment))
+            }
+        }
+    }
+
+
+    pub fn normalized_enum(&mut self) -> Result<Expression, SerializationError> {
+        let discriminant_expr = self.next_or_err()?;
+        let discriminant_span = discriminant_expr.span();
+
+        let Presence(discriminant, discriminant_span) = discriminant_expr.data else {
+            return Err(SerializationError::on_span(ExpectedPresence(discriminant_expr), discriminant_span))
+        };
+
+        let discriminant_comment = discriminant_expr.comment;
+
+        let Atom::Text(discriminant) = discriminant else {
+            return Err(SerializationError::on_span(ExpectedText(discriminant.to_string()), discriminant_span))
+        };
+
+        let Some(peeked) = self.peek() else {
+            return Ok(Self::normalize_composite(discriminant, vec![], discriminant_span, discriminant_comment))
+        };
+
+        if !peeked.is_list() {
+            return Ok(Self::normalize_composite(discriminant, vec![], discriminant_span, discriminant_comment))
         }
 
-        Ok((acc, outer_span.ok_or(SerializationError::end_of_input(source_text))?))
+        let next = self.next_or_err()?;
+        let List(list, list_span) = next.data else {
+            unreachable!()
+        };
+
+        Ok(Self::normalize_composite(discriminant, list, list_span, next.comment))
+    }
+
+    pub fn binding_map(&mut self) -> Result<BindingMap, SerializationError> {
+        let next = self.next_or_err()?;
+        let List(list, span) = next.data else {
+            let span = next.span();
+            return Err(SerializationError::on_span(ExpectedList(next), span))
+        };
+
+        let mut hashmap= HashMap::new();
+        for expr in list {
+            let BindingExpr(binding) = expr.data else {
+                let span = expr.span();
+                return Err(SerializationError::on_span(ExpectedBinding(expr), span))
+            };
+            hashmap.insert(binding.name.clone(), *binding.value);
+        }
+
+        Ok(BindingMap::new(hashmap, span))
     }
 }
 
@@ -184,5 +225,79 @@ impl DoubleEndedIterator for ExpressionIterator {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.spans.pop();
         self.inner.next_back()
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_complete_struct() {
+        let expected = Expression::list(vec![
+            Expression::presence("name"),
+            Expression::list(vec![Expression::presence("a"), Expression::presence("b")])
+        ]);
+
+        let mut expected_iter = expected.clone().into_iter();
+
+        assert_eq!(expected_iter.normalized_struct("name").unwrap(), expected);
+    }
+
+    #[test]
+    fn normalize_incomplete_struct() {
+        let expected = Expression::list(vec![
+            Expression::presence("name"),
+            Expression::list(vec![Expression::presence("a"), Expression::presence("b")])
+        ]);
+
+        let mut incomplete_iter = Expression::list(vec![
+            Expression::list(vec![Expression::presence("a"), Expression::presence("b")])
+        ]).clone().into_iter();
+
+        assert_eq!(incomplete_iter.normalized_struct("name").unwrap(), expected);
+    }
+
+    #[test]
+    fn normalize_complete_enum() {
+        let expected = Expression::list(vec![
+            Expression::presence("name"),
+            Expression::list(vec![Expression::presence("a"), Expression::presence("b")])
+        ]);
+
+        let mut expected_iter = expected.clone().into_iter();
+
+        assert_eq!(expected_iter.normalized_enum().unwrap(), expected);
+    }
+
+    #[test]
+    fn normalize_incomplete_enum() {
+        let expected = Expression::list(vec![
+            Expression::presence("name"),
+            Expression::list(vec![])
+        ]);
+
+        let mut incomplete_iter = Expression::list(vec![
+            Expression::presence("name"),
+        ]).clone().into_iter();
+
+        assert_eq!(incomplete_iter.normalized_enum().unwrap(), expected);
+    }
+
+    #[test]
+    fn normalize_struct_does_not_double_wrap() {
+        // Already looks like (Demo (...))
+        let already_normalized = Expression::list(vec![
+            Expression::presence("Demo"),
+            Expression::list(vec![
+                Expression::binding("name", Expression::presence("Momo")),
+                Expression::binding("count", Expression::presence(3)),
+            ]),
+        ]);
+
+        // Running through normalized_struct again should be idempotent
+        let mut iter = already_normalized.clone().into_iter();
+        let normalized = iter.normalized_struct("Demo").unwrap();
+
+        assert_eq!(normalized, already_normalized);
     }
 }

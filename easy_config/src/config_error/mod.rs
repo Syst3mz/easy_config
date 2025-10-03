@@ -1,6 +1,6 @@
 pub mod describe;
 
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Formatter};
 use crate::config_error::describe::Describe;
 use crate::lexical_span::LexicalSpan;
 
@@ -30,19 +30,24 @@ fn build_error_area(span: LexicalSpan, source_text: impl AsRef<str>) -> String {
         offset
     )
 }
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum ConfigError<Kind> {
-    FirstLevelError(Kind, String),
+    FirstLevelError(Kind, LexicalSpan),
     ContextualizedError(String, Box<ConfigError<Kind>>)
 }
 
+impl<T: Debug> Debug for ConfigError<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            ConfigError::FirstLevelError(kind, at) => format!("{:?} @ {}", kind, at),
+            ConfigError::ContextualizedError(ctx, inner) => format!("{:?}\n{}", inner, ctx)
+        })
+    }
+}
 
 impl<Kind> ConfigError<Kind> {
-    pub fn on_span(kind: Kind, span: LexicalSpan, source_text: impl AsRef<str>) -> Self {
-        let source_text = source_text.as_ref();
-        let (row, col) = span.find_row_and_column(source_text);
-        Self::FirstLevelError(kind, build_error_area(span, source_text))
-            .contextualize(format!("Error at {row}:{col}"))
+    pub fn on_span(kind: impl Into<Kind>, span: LexicalSpan) -> Self {
+        Self::FirstLevelError(kind.into(), span)
     }
 
     pub fn contextualize(self, context: impl AsRef<str>) -> Self {
@@ -57,21 +62,13 @@ impl<Kind> ConfigError<Kind> {
     }
 }
 
-fn get_description<T: Describe>(kind: &T, area: impl AsRef<str>) -> String {
-    let area = area.as_ref();
-    if area.is_empty() {
-        kind.describe()
-    } else {
-        format!("{}\n{}", kind.describe(), area)
-    }
-}
-impl<Kind: Describe> Display for ConfigError<Kind> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            ConfigError::FirstLevelError(kind, area) => get_description(kind, area),
-            ConfigError::ContextualizedError(context, err) =>
-                format!("{}\n{}", context, err.to_string())
-        })
+impl<Kind: Describe> ConfigError<Kind> {
+    pub fn to_error_string(self, source_text: impl AsRef<str>) -> String {
+        let source_text = source_text.as_ref();
+        match self {
+            ConfigError::FirstLevelError(k, s) => format!("{}\n{}", k.describe(source_text), build_error_area(s, source_text)),
+            ConfigError::ContextualizedError(ctx, inner) => format!("{}\n{}", inner.to_error_string(&source_text), ctx)
+        }
     }
 }
 
@@ -83,5 +80,3 @@ impl<T, Kind> Contextualize for Result<T, ConfigError<Kind>> {
         self.map_err(|err| err.contextualize(context))
     }
 }
-
-impl<T: Debug+Describe> std::error::Error for ConfigError<T> {}

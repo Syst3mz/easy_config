@@ -6,8 +6,8 @@ pub mod parser;
 pub mod serialization;
 pub mod lexical_span;
 pub mod config_error;
-
-
+mod binding_map;
+mod tests;
 
 #[cfg(feature = "derive")]
 pub use easy_config_derive::EasyConfig;
