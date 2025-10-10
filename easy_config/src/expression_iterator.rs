@@ -89,25 +89,6 @@ impl ExpressionIterator {
         T::deserialize(&mut next.into_iter(), source_text)
     }
 
-    pub fn extract_enum(&mut self) -> Result<(String, Expression), SerializationError> {
-        let next = self.next_or_err()?;
-
-        let mut enum_iter = next.into_iter();
-        let discriminant_expr = enum_iter.next_or_err()?;
-
-        let Presence(discriminant, discriminant_span) = discriminant_expr.data else {
-            let span = discriminant_expr.span();
-            return Err(SerializationError::on_span(Kind::ExpectedPresence(discriminant_expr), span))
-        };
-
-        let Atom::Text(discriminant) = discriminant else {
-            return Err(SerializationError::on_span(Kind::ExpectedText(discriminant.to_string()), discriminant_span))
-        };
-
-
-        Ok((discriminant, enum_iter.next_list_or_err().unwrap_or(Expression::list(vec![]))))
-    }
-
     fn normalize_composite(name: String, exprs: Vec<Expression>, lexical_span: LexicalSpan, comment: Option<String>) -> Expression {
         Expression::list(vec![
             Expression::presence(Atom::Text(name)),
@@ -152,35 +133,57 @@ impl ExpressionIterator {
     }
 
 
-    pub fn normalized_enum(&mut self) -> Result<Expression, SerializationError> {
+    pub fn normalized_enum(&mut self) -> Result<(String, LexicalSpan, Expression), SerializationError> {
         let discriminant_expr = self.next_or_err()?;
         let discriminant_span = discriminant_expr.span();
 
         let Presence(discriminant, discriminant_span) = discriminant_expr.data else {
-            return Err(SerializationError::on_span(ExpectedPresence(discriminant_expr), discriminant_span))
+            return Err(SerializationError::on_span(
+                ExpectedPresence(discriminant_expr),
+                discriminant_span,
+            ));
         };
 
         let discriminant_comment = discriminant_expr.comment;
 
         let Atom::Text(discriminant) = discriminant else {
-            return Err(SerializationError::on_span(ExpectedText(discriminant.to_string()), discriminant_span))
+            return Err(SerializationError::on_span(
+                ExpectedText(discriminant.to_string()),
+                discriminant_span,
+            ));
         };
 
+        // If there’s no payload, return empty composite
         let Some(peeked) = self.peek() else {
-            return Ok(Self::normalize_composite(discriminant, vec![], discriminant_span, discriminant_comment))
+            return Ok((
+                discriminant.clone(),
+                discriminant_span,
+                Expression::new(List(vec![], discriminant_span), discriminant_comment),
+            ));
         };
 
+        // If the next expr isn’t a list, treat it as no payload
         if !peeked.is_list() {
-            return Ok(Self::normalize_composite(discriminant, vec![], discriminant_span, discriminant_comment))
+            return Ok((
+                discriminant.clone(),
+                discriminant_span,
+                Expression::new(List(vec![], discriminant_span), discriminant_comment),
+            ));
         }
 
+        // Otherwise consume the list and treat its contents as the payload
         let next = self.next_or_err()?;
         let List(list, list_span) = next.data else {
             unreachable!()
         };
 
-        Ok(Self::normalize_composite(discriminant, list, list_span, next.comment))
+        Ok((
+            discriminant.clone(),
+            discriminant_span,
+            Expression::new(List(list, list_span), next.comment),
+        ))
     }
+
 
     pub fn binding_map(&mut self) -> Result<BindingMap, SerializationError> {
         let next = self.next_or_err()?;
@@ -259,29 +262,41 @@ mod tests {
 
     #[test]
     fn normalize_complete_enum() {
-        let expected = Expression::list(vec![
+        // Input looks like: (name (a b))
+        let input = Expression::list(vec![
             Expression::presence("name"),
-            Expression::list(vec![Expression::presence("a"), Expression::presence("b")])
+            Expression::list(vec![Expression::presence("a"), Expression::presence("b")]),
         ]);
 
-        let mut expected_iter = expected.clone().into_iter();
+        let mut iter = input.into_iter();
 
-        assert_eq!(expected_iter.normalized_enum().unwrap(), expected);
+        let (disc, span, payload) = iter.normalized_enum().unwrap();
+
+        assert_eq!(disc, "name");
+        assert_eq!(span, LexicalSpan::zeros());
+        assert_eq!(
+            payload,
+            Expression::list(vec![
+                Expression::presence("a"),
+                Expression::presence("b"),
+            ])
+        );
     }
 
     #[test]
     fn normalize_incomplete_enum() {
-        let expected = Expression::list(vec![
-            Expression::presence("name"),
-            Expression::list(vec![])
-        ]);
+        // Input looks like: (name)
+        let input = Expression::list(vec![Expression::presence("name")]);
 
-        let mut incomplete_iter = Expression::list(vec![
-            Expression::presence("name"),
-        ]).clone().into_iter();
+        let mut iter = input.into_iter();
 
-        assert_eq!(incomplete_iter.normalized_enum().unwrap(), expected);
+        let (disc, span, payload) = iter.normalized_enum().unwrap();
+
+        assert_eq!(disc, "name");
+        assert_eq!(span, LexicalSpan::zeros());
+        assert_eq!(payload, Expression::list(vec![]));
     }
+
 
     #[test]
     fn normalize_struct_does_not_double_wrap() {

@@ -15,9 +15,9 @@ keywords = ["config"]
 proc-macro = true
 
 [dependencies]
-syn = { version = "2"}
-quote = "1.0"
-proc-macro2 = "1.0"
+syn = { version = "^2"}
+quote = "^1.0"
+proc-macro2 = "^1.0"
 
 [dev-dependencies]
 easy_config = {path = "../easy_config" }

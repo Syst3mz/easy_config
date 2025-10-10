@@ -41,6 +41,7 @@ mod tests {
         let text = exprs.uncomented_dump();
         let parsed = Parser::new(&text).parse().unwrap().into_iter().next().unwrap();
         println!("{}", text);
+        println!("{}", parsed.dump());
         let deserialized = UnnamedFields::deserialize(&mut parsed.into_iter(), text).expect("should deserialize");
         assert_eq!(deserialized, testing());
     }

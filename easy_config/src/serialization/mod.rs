@@ -2,6 +2,8 @@ pub mod primitives;
 pub mod tuples;
 pub mod serialization_error;
 pub mod option_span_combine;
+mod option;
+mod collections;
 
 use std::path::Path;
 use anyhow::anyhow;

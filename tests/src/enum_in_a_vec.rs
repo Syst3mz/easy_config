@@ -43,7 +43,7 @@ mod tests {
         let serialized_text = test_struct().serialize().uncomented_dump();
         let parsed = Parser::new(&serialized_text).parse().unwrap();
         let deserialized = TestStruct::deserialize(
-            &mut parsed.into_iter().next_or_err(&serialized_text).unwrap().into_iter(),
+            &mut parsed.into_iter().next_or_err().unwrap().into_iter(),
             serialized_text
         ).unwrap();
         assert_eq!(deserialized, test_struct())

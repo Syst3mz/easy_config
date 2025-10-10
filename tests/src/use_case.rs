@@ -23,9 +23,11 @@ mod tests {
 
     #[test]
     fn read_human_input() {
-        let input = r"address = localhost
-        port = 1337
-        name = h4x0r";
+        let input = r"(
+            address = localhost
+            port = 1337
+            name = h4x0r
+        )";
         let parsed = Parser::new(input).parse().unwrap();
         assert_eq!(ServerTest::deserialize(&mut parsed.into_iter(), input).unwrap(), localhost());
     }
