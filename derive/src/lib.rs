@@ -5,9 +5,7 @@ mod shared;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DataEnum, DataStruct, DeriveInput, Generics};
-use crate::deserialize_helpers::{
-    deserialize_variant_arm, deserialize_unit_struct, deserialize_named_struct,
-};
+use crate::deserialize_helpers::{deserialize_variant_arm, deserialize_unit_struct, deserialize_named_struct, deserialize_unnamed_struct};
 use crate::serialize_helpers::{serialize_named_fields, serialize_unnamed_fields, serialize_variant_arm};
 use crate::shared::comma_separated_list;
 
@@ -26,6 +24,12 @@ fn generate_impl_generics(
     )
 }
 
+fn imports() -> proc_macro2::TokenStream {
+    quote! {
+        use ::easy_config::config_error::Contextualize;
+    }
+}
+
 fn generate_config_for_struct(input: &DeriveInput, data: &DataStruct) -> TokenStream {
     let struct_name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = generate_impl_generics(&input.generics);
@@ -33,46 +37,32 @@ fn generate_config_for_struct(input: &DeriveInput, data: &DataStruct) -> TokenSt
     let _self = quote! { self. };
 
     let serialize_body = match &data.fields {
-        syn::Fields::Named(fields_named) => serialize_named_fields(_self, fields_named),
-        syn::Fields::Unnamed(fields_unnamed) => serialize_unnamed_fields(_self, fields_unnamed),
+        syn::Fields::Named(fields_named) => serialize_named_fields(_self, struct_name, fields_named),
+        syn::Fields::Unnamed(fields_unnamed) => serialize_unnamed_fields(_self, fields_unnamed, struct_name),
         syn::Fields::Unit => serialize_unit_field(),
     };
 
-    let struct_name_str = struct_name.to_string();
-
     let deserialize_body = match &data.fields {
-        syn::Fields::Named(fields_named) => deserialize_named_struct(fields_named, &struct_name_str),
-        syn::Fields::Unnamed(fields_unnamed) => {
-            // **Modified:** Recursive call to EasyConfig::deserialize for each tuple field
-            let field_deserializers = fields_unnamed.unnamed.iter().enumerate().map(|(idx, field)| {
-                let ty = &field.ty;
-                let err_text = format!(
-                    "Unable to read field {} of tuple struct '{}'",
-                    idx, struct_name_str
-                );
-                quote! {
-                    <#ty as ::easy_config::serialization::EasyConfig>::deserialize(exprs, source_text)
-                        .contextualize(#err_text)?
-                }
-            });
-            let fields = comma_separated_list(field_deserializers);
-            quote! { Ok(Self(#fields)) }
-        }
+        syn::Fields::Named(fields_named) => deserialize_named_struct(fields_named, struct_name),
+        syn::Fields::Unnamed(fields_unnamed) => deserialize_unnamed_struct(fields_unnamed, struct_name),
         syn::Fields::Unit => deserialize_unit_struct(struct_name),
     };
+    let imports = imports();
 
     quote! {
         impl #impl_generics ::easy_config::serialization::EasyConfig for #struct_name #ty_generics #where_clause {
             fn serialize(&self) -> ::easy_config::expression::Expression {
-                let mut body = #serialize_body;
-                body.prepend_into_list(::easy_config::expression::Expression::presence(#struct_name_str));
-                body
+                #imports
+                #serialize_body
             }
 
-            fn deserialize(exprs: &mut ::easy_config::expression_iterator::ExpressionIterator, source_text: impl AsRef<str>) -> Result<Self, ::easy_config::serialization::serialization_error::SerializationError> {
-                use ::easy_config::config_error::Contextualize;
+            fn deserialize(expression_iterator: &mut ::easy_config::expression_iterator::ExpressionIterator, source_text: impl AsRef<str>) -> Result<Self, ::easy_config::serialization::serialization_error::SerializationError> {
+                #imports
+                let mut normalized = expression_iterator
+                    .normalized_struct(stringify!(#struct_name))?
+                    .into_iter();
+                normalized.next();
                 let source_text = source_text.as_ref();
-                exprs.eat_presence_if_present_and_matching(#struct_name_str);
                 #deserialize_body
             }
         }

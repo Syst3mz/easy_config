@@ -14,29 +14,21 @@ fn deserialize_named_fields(fields_named: &FieldsNamed, err_name: impl AsRef<str
         );
 
         quote! {
-            #ident: binding_map
-                .get(#name_str, source_text)
-                .contextualize(#err_text)?
+            #ident: fields.get(stringify!(#ident), source_text).contextualize(#err_text)?
         }
     });
     comma_separated_list(fields)
 }
 
-pub fn deserialize_named_struct(fields_named: &FieldsNamed, struct_name: impl AsRef<str>) -> proc_macro2::TokenStream {
-    let struct_name = struct_name.as_ref();
-
-    let fields = deserialize_named_fields(fields_named, struct_name);
+pub fn deserialize_named_struct(fields_named: &FieldsNamed, struct_name: &Ident) -> proc_macro2::TokenStream {
+    let fields = deserialize_named_fields(fields_named, struct_name.to_string());
     let err_text = format!(
         "Unable to read a {} because it is not a list of bindings.",
         struct_name
     );
 
     quote! {
-        use ::easy_config::config_error::Contextualize;
-        let mut binding_map = exprs
-            .binding_map()
-            .contextualize(#err_text)?;
-
+        let mut fields = normalized.binding_map().contextualize(#err_text)?;
         Ok(Self {
             #fields
         })
@@ -62,13 +54,13 @@ fn deserialize_unnamed_fields(fields_unnamed: &FieldsUnnamed, err_name: impl AsR
 
 pub fn deserialize_unnamed_struct(
     fields_unnamed: &FieldsUnnamed,
-    struct_name: impl AsRef<str>
+    struct_name: &Ident
 ) -> proc_macro2::TokenStream {
-    let field_deserializers = deserialize_unnamed_fields(fields_unnamed, struct_name);
-
+    let field_deserializers = deserialize_unnamed_fields(fields_unnamed, struct_name.to_string());
+    let err_text = format!("Failed to fetch list of fields for a {}", struct_name);
     quote! {
-        use ::easy_config::config_error::Contextualize;
-
+        let exprs = normalized.next_or_err().contextualize(#err_text)?;
+        let mut exprs = exprs.into_iter();
         Ok(Self(
             #field_deserializers
         ))

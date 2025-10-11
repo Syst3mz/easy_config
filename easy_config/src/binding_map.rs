@@ -5,6 +5,7 @@ use crate::serialization::EasyConfig;
 use crate::serialization::serialization_error::Kind::MissingField;
 use crate::serialization::serialization_error::SerializationError;
 
+#[derive(Debug, Clone)]
 pub struct BindingMap {
     hashmap: HashMap<String, Expression>,
     span: LexicalSpan
@@ -20,6 +21,7 @@ impl BindingMap {
         let expr = self.hashmap
             .remove(field)
             .ok_or(SerializationError::on_span(MissingField("name".to_string()), self.span))?;
-        T::deserialize(&mut expr.into_iter(), source_text)
+        let expr_span = expr.span();
+        T::deserialize(&mut Expression::list(vec![expr]).with_span(expr_span).into_iter(), source_text)
     }
 }

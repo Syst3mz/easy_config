@@ -24,14 +24,16 @@ mod tests {
         assert_eq!(testing().serialize(), Expression::list(vec![
             Expression::presence("UnnamedFields"),
             Expression::list(vec![
-                Expression::presence("hello"),
-                Expression::presence("world"),
+                Expression::list(vec![
+                    Expression::presence("hello"),
+                    Expression::presence("world"),
+                ]),
+                Expression::list(vec![
+                    Expression::presence(1),
+                    Expression::presence(2),
+                    Expression::presence(3)
+                ]).with_comment("My favorite numbers in order.")
             ]),
-            Expression::list(vec![
-                Expression::presence(1),
-                Expression::presence(2),
-                Expression::presence(3)
-            ]).with_comment("My favorite numbers in order."),
         ]))
     }
 
@@ -40,8 +42,6 @@ mod tests {
         let exprs = testing().serialize();
         let text = exprs.uncomented_dump();
         let parsed = Parser::new(&text).parse().unwrap().into_iter().next().unwrap();
-        println!("{}", text);
-        println!("{}", parsed.dump());
         let deserialized = UnnamedFields::deserialize(&mut parsed.into_iter(), text).expect("should deserialize");
         assert_eq!(deserialized, testing());
     }

@@ -14,10 +14,11 @@ use crate::parser::Parser;
 use crate::serialization::serialization_error::{Kind, SerializationError};
 
 pub trait EasyConfig: 'static {
-    /// Is composite tells Easy Config if a type is composed of other types (enums are considered a composite type) AND has a name.
+
     const IS_ENUM: bool = false;
     const IS_STRUCT: bool = false;
 
+    /// Is composite tells Easy Config if a type is composed of other types (enums are considered a composite type) AND has a name.
     fn is_composite() -> bool { Self::IS_ENUM || Self::IS_STRUCT }
 
     fn serialize(&self) -> Expression;

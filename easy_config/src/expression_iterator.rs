@@ -86,6 +86,8 @@ impl ExpressionIterator {
 
     pub fn deserialize_next<T: EasyConfig>(&mut self, source_text: impl AsRef<str>) -> Result<T, SerializationError> {
         let next = self.next_or_err()?;
+        let next_span = next.span();
+        let next = Expression::list(vec![next]).with_span(next_span);
         T::deserialize(&mut next.into_iter(), source_text)
     }
 
@@ -143,6 +145,7 @@ impl ExpressionIterator {
                 discriminant_span,
             ));
         };
+
 
         let discriminant_comment = discriminant_expr.comment;
 

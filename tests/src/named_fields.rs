@@ -28,15 +28,17 @@ mod tests {
 
         assert_eq!(testing().serialize(), Expression::list(vec![
             Expression::presence("NamedFields"),
-            Expression::binding("x", Expression::list(vec![
-                Expression::presence("hello"),
-                Expression::presence("world"),
-            ])),
-            Expression::binding("z", Expression::list(vec![
-                Expression::presence(1),
-                Expression::presence(2),
-                Expression::presence(3)
-            ])).with_comment("My favorite numbers in order."),
+            Expression::list(vec![
+                Expression::binding("x", Expression::list(vec![
+                    Expression::presence("hello"),
+                    Expression::presence("world"),
+                ])),
+                Expression::binding("z", Expression::list(vec![
+                    Expression::presence(1),
+                    Expression::presence(2),
+                    Expression::presence(3)
+                ])).with_comment("My favorite numbers in order.")
+            ]),
         ]))
     }
 
