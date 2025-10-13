@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::iter::Peekable;
 use crate::binding_map::BindingMap;
+use crate::config_error::Contextualize;
 use crate::expression::{Atom, Expression};
 use crate::expression::ExpressionData::{BindingExpr, List, Presence};
 use crate::lexical_span::LexicalSpan;
@@ -135,7 +136,7 @@ impl ExpressionIterator {
     }
 
 
-    pub fn normalized_enum(&mut self) -> Result<(String, LexicalSpan, Expression), SerializationError> {
+    fn normalized_enum_helper(&mut self) -> Result<(String, LexicalSpan, Expression), SerializationError> {
         let discriminant_expr = self.next_or_err()?;
         let discriminant_span = discriminant_expr.span();
 
@@ -185,6 +186,20 @@ impl ExpressionIterator {
             discriminant_span,
             Expression::new(List(list, list_span), next.comment),
         ))
+    }
+
+    pub fn normalized_enum(&mut self) -> Result<(String, LexicalSpan, Expression), SerializationError> {
+        let Some(expr) = self.peek() else {
+            return Err(SerializationError::end_of_input())
+                .contextualize("Failed to read enum.")
+        };
+
+        if expr.is_list() {
+            let mut expr = self.next_or_err()?.into_iter();
+            expr.normalized_enum_helper()
+        } else {
+            self.normalized_enum_helper()
+        }
     }
 
 

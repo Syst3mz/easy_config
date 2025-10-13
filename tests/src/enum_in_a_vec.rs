@@ -17,6 +17,7 @@ mod tests {
     use easy_config::parser::Parser;
     use easy_config::serialization::EasyConfig;
     use super::*;
+    use pretty_assertions::assert_eq;
 
     fn test_struct() -> TestStruct {
         TestStruct {
@@ -31,10 +32,12 @@ mod tests {
     fn serialize() {
         assert_eq!(test_struct().serialize(), Expression::list(vec![
             Expression::presence("TestStruct"),
-            Expression::binding("contents", Expression::list(vec![
-                Expression::list(vec![Expression::presence("First"), Expression::list(vec![Expression::presence("hello")])]),
-                Expression::list(vec![Expression::presence("Second"), Expression::list(vec![Expression::presence("world")])]),
-            ])),
+            Expression::list(vec![
+                Expression::binding("contents", Expression::list(vec![
+                    Expression::list(vec![Expression::presence("First"), Expression::list(vec![Expression::presence("hello")])]),
+                    Expression::list(vec![Expression::presence("Second"), Expression::list(vec![Expression::presence("world")])])
+                ]))
+            ])
         ]))
     }
 

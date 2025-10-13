@@ -12,41 +12,7 @@ fn normal_form(name: &Ident, entries: proc_macro2::TokenStream) -> proc_macro2::
     }
 }
 
-pub fn serialize_named_field(accessor: impl ToTokens, field: &Field) -> proc_macro2::TokenStream {
-    let field_ident = field.ident.as_ref().unwrap();
-    let field_name = string_from(field_ident.to_string());
-
-    let uncommented = quote! {
-        ::easy_config::expression::Expression::binding(
-            #field_name,
-            #accessor #field_ident.serialize()
-        )
-    };
-    append_comment(uncommented, &field)
-}
-pub fn serialize_named_fields(prefix: impl ToTokens, struct_name: &Ident, fields_named: &FieldsNamed) -> proc_macro2::TokenStream {
-    let prefix = prefix.into_token_stream();
-
-    let entries = fields_named.named.iter().map(|field| {
-        serialize_named_field(prefix.clone(), &field)
-    });
-
-    let entries = serialize_into_list(entries);
-    normal_form(struct_name, entries)
-}
-
-pub fn serialize_unnamed_fields(prefix: impl ToTokens, fields_unnamed: &FieldsUnnamed, struct_name: &Ident) -> proc_macro2::TokenStream {
-    let entries = fields_unnamed.unnamed.iter().enumerate().map(|(index, field)| {
-        let index = syn::Index::from(index);
-        append_comment(quote! {
-            #prefix #index.serialize()
-        }, field)
-    });
-
-    let entries = serialize_into_list(entries);
-    normal_form(struct_name, entries)
-}
-pub fn extract_comment(attrs: &[syn::Attribute]) -> Option<String> {
+fn extract_comment(attrs: &[syn::Attribute]) -> Option<String> {
     for attr in attrs {
         if attr.path().is_ident("comment") {
             if let Ok(lit) = attr.parse_args::<syn::LitStr>() {
@@ -57,10 +23,6 @@ pub fn extract_comment(attrs: &[syn::Attribute]) -> Option<String> {
     None
 }
 
-pub fn string_from(string: impl AsRef<str>) -> proc_macro2::TokenStream {
-    let string = string.as_ref();
-    quote! { String::from(#string) }
-}
 pub fn append_comment(uncommented: proc_macro2::TokenStream, field: &Field) -> proc_macro2::TokenStream {
     if let Some(comment) = extract_comment(&field.attrs) {
         quote! { #uncommented.with_comment(#comment) }
@@ -76,17 +38,51 @@ pub fn serialize_into_list<I: IntoIterator<Item = impl ToTokens>>(entries: I) ->
     }
 }
 
-
-fn serialize_variant_with_no_fields() -> proc_macro2::TokenStream {
-    quote! {
-        ::easy_config::expression::Expression::list(vec![])
-    }
-}
-
 fn destructure_unnamed(fields_unnamed: &FieldsUnnamed) -> Vec<Ident> {
     (0..fields_unnamed.unnamed.len())
         .map(|i| syn::Ident::new(&format!("f{}", i), proc_macro2::Span::call_site()))
         .collect()
+}
+
+pub fn serialize_named_field(accessor: impl ToTokens, field: &Field) -> proc_macro2::TokenStream {
+    let field_ident = field.ident.as_ref().unwrap();
+
+    let uncommented = quote! {
+        ::easy_config::expression::Expression::binding(
+            stringify!(#field_ident),
+            #accessor #field_ident.serialize()
+        )
+    };
+    append_comment(uncommented, &field)
+}
+pub fn serialize_named_fields(prefix: impl ToTokens, structure_name: &Ident, fields_named: &FieldsNamed) -> proc_macro2::TokenStream {
+    let prefix = prefix.into_token_stream();
+
+    let entries = fields_named.named.iter().map(|field| {
+        serialize_named_field(prefix.clone(), &field)
+    });
+
+    normal_form(structure_name, serialize_into_list(entries))
+}
+
+pub fn serialize_unnamed_fields(prefix: impl ToTokens, fields_unnamed: &FieldsUnnamed, struct_name: &Ident) -> proc_macro2::TokenStream {
+    let entries = fields_unnamed.unnamed.iter().enumerate().map(|(index, field)| {
+        let index = syn::Index::from(index);
+        append_comment(quote! {
+            #prefix #index.serialize()
+        }, field)
+    });
+
+    let entries = serialize_into_list(entries);
+    normal_form(struct_name, entries)
+}
+
+
+fn serialize_variant_with_no_fields(variant_name: &Ident) -> proc_macro2::TokenStream {
+
+    normal_form(variant_name, quote! {
+        ::easy_config::expression::Expression::list(vec![])
+    })
 }
 
 fn prepend_arm(enum_name: &Ident, variant: &Variant, to: impl ToTokens) -> proc_macro2::TokenStream {
@@ -111,7 +107,7 @@ fn prepend_arm(enum_name: &Ident, variant: &Variant, to: impl ToTokens) -> proc_
     }
 }
 
-fn serialize_unnamed_variant(variant_name: &Ident, fields_unnamed: &FieldsUnnamed) -> proc_macro2::TokenStream {
+fn serialize_unnamed_variant(fields_unnamed: &FieldsUnnamed, variant_name: &Ident) -> proc_macro2::TokenStream {
     // Generate direct serialization calls for each field variable (f0, f1, f2, etc.)
     let entries = (0..fields_unnamed.unnamed.len()).map(|index| {
         let field_var = syn::Ident::new(&format!("f{}", index), proc_macro2::Span::call_site());
@@ -121,25 +117,14 @@ fn serialize_unnamed_variant(variant_name: &Ident, fields_unnamed: &FieldsUnname
         }, field)
     });
 
-    let entries = comma_separated_list(entries);
-
-    normal_form(variant_name, entries)
+    normal_form(variant_name, serialize_into_list(entries))
 }
 pub fn serialize_variant_arm(enum_name: &Ident, variant: &Variant) -> proc_macro2::TokenStream {
-
     let fields = match &variant.fields {
         Fields::Named(named) => serialize_named_fields(quote! {}, &variant.ident, named),
-        Fields::Unnamed(unnamed) => serialize_unnamed_variant(&variant.ident, unnamed),
-        Fields::Unit => serialize_variant_with_no_fields()
+        Fields::Unnamed(unnamed) => serialize_unnamed_variant(unnamed, &variant.ident),
+        Fields::Unit => serialize_variant_with_no_fields(&variant.ident)
     };
 
-    let variant_name_string = variant.ident.to_string();
-
-    let container = quote! {
-        ::easy_config::expression::Expression::list(vec![
-            ::easy_config::expression::Expression::presence(#variant_name_string),
-            #fields
-        ])
-    };
-    prepend_arm(enum_name, variant, container)
+    prepend_arm(enum_name, variant, fields)
 }

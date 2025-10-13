@@ -98,7 +98,7 @@ pub fn deserialize_variant_arm(enum_name: &Ident, variant: &Variant) -> proc_mac
                     let mut binding_map = fields
                         .into_iter()
                         .binding_map()
-                        .contextualize(&format!(
+                        .contextualize(format!(
                             "Unable to read enum variant '{}' because it is not a list of bindings",
                             #field_name
                         ))?;

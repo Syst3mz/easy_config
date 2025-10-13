@@ -6,3 +6,6 @@ edition = "2024"
 [dependencies]
 easy_config = { path = "../easy_config", features = ["derive"]}
 easy_config_derive = { path = "../derive" }
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"

@@ -12,6 +12,7 @@ mod tests {
     use easy_config::expression::Expression;
     use easy_config::parser::Parser;
     use crate::simple_enum::EnumNoArgs;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn serialize() {

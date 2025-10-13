@@ -20,13 +20,14 @@ mod tests {
     use easy_config::expression::Expression;
     use easy_config::parser::Parser;
     use easy_config::serialization::EasyConfig;
+    use pretty_assertions::assert_eq;
 
     use super::*;
 
     #[test]
     fn serialize() {
 
-        assert_eq!(testing().serialize(), Expression::list(vec![
+        assert_eq!(testing().serialize().pretty(), Expression::list(vec![
             Expression::presence("NamedFields"),
             Expression::list(vec![
                 Expression::binding("x", Expression::list(vec![
@@ -39,7 +40,7 @@ mod tests {
                     Expression::presence(3)
                 ])).with_comment("My favorite numbers in order.")
             ]),
-        ]))
+        ]).pretty())
     }
 
     #[test]

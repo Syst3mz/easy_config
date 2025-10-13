@@ -29,10 +29,12 @@ mod tests {
     #[test]
     fn named_serialize() {
         assert_eq!(Complex::Named { x: 1, y: 2 }.serialize(), Expression::list(vec![
-            Expression::presence("Named"),
             Expression::list(vec![
-                Expression::binding("x", Expression::presence(1)),
-                Expression::binding("y", Expression::presence(2))
+                Expression::presence("Named"),
+                Expression::list(vec![
+                    Expression::binding("x", Expression::presence(1)),
+                    Expression::binding("y", Expression::presence(2)),
+                ])
             ])
         ]))
     }
