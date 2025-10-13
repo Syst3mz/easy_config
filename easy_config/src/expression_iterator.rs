@@ -194,7 +194,6 @@ impl ExpressionIterator {
 
     pub fn binding_map(&mut self) -> Result<BindingMap, SerializationError> {
         let next = self.next_or_err()?;
-        dbg!(next.dump());
         let List(list, span) = next.data else {
             let span = next.span();
             return Err(SerializationError::on_span(ExpectedList(next), span))
@@ -210,6 +209,20 @@ impl ExpressionIterator {
         }
 
         Ok(BindingMap::new(hashmap, span))
+    }
+
+    pub fn next_text_or_err(&mut self) -> Result<(String, LexicalSpan), SerializationError> {
+        let maybe_atom = self.next_or_err()?;
+        let Presence(atom, atom_span) = maybe_atom.data else {
+            let span = maybe_atom.span();
+            return Err(SerializationError::on_span(ExpectedPresence(maybe_atom), span))
+        };
+
+        let Atom::Text(discriminant) = atom else {
+            return Err(SerializationError::on_span(ExpectedText(atom.to_string()), atom_span))
+        };
+
+        Ok((discriminant, atom_span))
     }
 }
 
@@ -278,16 +291,15 @@ mod tests {
 
         let mut iter = input.into_iter();
 
-        let expr = iter.normalized_enum().unwrap();
-
-        assert_eq!(disc, "name");
-        assert_eq!(span, LexicalSpan::zeros());
+        let mut expr = iter.normalized_enum().unwrap().into_iter();
+        let name = expr.next_or_err().unwrap();
+        assert_eq!(name.data, Expression::presence("name").data);
         assert_eq!(
-            payload,
+            expr.next_or_err().unwrap().data,
             Expression::list(vec![
                 Expression::presence("a"),
                 Expression::presence("b"),
-            ])
+            ]).data
         );
     }
 
@@ -298,11 +310,10 @@ mod tests {
 
         let mut iter = input.into_iter();
 
-        let expr = iter.normalized_enum().unwrap();
+        let mut expr = iter.normalized_enum().unwrap().into_iter();
 
-        assert_eq!(disc, "name");
-        assert_eq!(span, LexicalSpan::zeros());
-        assert_eq!(payload, Expression::list(vec![]));
+        assert_eq!(expr.next_or_err().unwrap().data, Expression::presence("name").data);
+        assert_eq!(expr.next_or_err().unwrap().data, Expression::list(vec![]).data);
     }
 
 

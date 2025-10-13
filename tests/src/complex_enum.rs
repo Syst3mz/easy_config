@@ -59,7 +59,6 @@ mod tests {
     fn named_deserialize() {
         let text = Complex::Named { x: 1, y: 2 }.serialize().dump();
         let parsed = Parser::new(&text).parse().unwrap();
-        println!("{}", parsed.pretty());
         let result = Complex::deserialize(&mut parsed.into_iter(), text).unwrap();
         assert_eq!(result, Complex::Named { x: 1, y: 2 });
     }

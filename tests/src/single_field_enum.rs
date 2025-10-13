@@ -26,7 +26,6 @@ mod tests {
     #[test]
     fn deserialize() {
         let text = First("hello".to_string()).serialize().dump();
-        dbg!(&text);
         let x = TestEnum::deserialize(&mut Parser::new(&text).parse().unwrap().into_iter(), &text).unwrap();
         assert_eq!(x, TestEnum::First("hello".to_string()));
     }

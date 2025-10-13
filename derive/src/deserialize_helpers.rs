@@ -95,8 +95,7 @@ pub fn deserialize_variant_arm(enum_name: &Ident, variant: &Variant) -> proc_mac
             quote! {
                 #field_name => {
                     use ::easy_config::config_error::Contextualize;
-                    let mut binding_map = fields
-                        .into_iter()
+                    let mut binding_map = normalized_iter
                         .binding_map()
                         .contextualize(format!(
                             "Unable to read enum variant '{}' because it is not a list of bindings",
@@ -124,7 +123,7 @@ pub fn deserialize_variant_arm(enum_name: &Ident, variant: &Variant) -> proc_mac
             quote! {
                 #field_name => {
                     use ::easy_config::config_error::Contextualize;
-                    let mut fields_iter = fields.into_iter();
+                    let mut fields_iter = normalized_iter.next_or_err()?.into_iter();
                     Ok(#enum_name::#variant_ident(#field_list))
                 }
             }

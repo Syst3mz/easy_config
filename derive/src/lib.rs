@@ -99,17 +99,20 @@ fn generate_config_for_enum(input: &DeriveInput, data: &DataEnum) -> TokenStream
             fn deserialize(exprs: &mut ::easy_config::expression_iterator::ExpressionIterator, source_text: impl AsRef<str>) -> Result<Self, ::easy_config::serialization::serialization_error::SerializationError> {
                 use ::easy_config::config_error::Contextualize;
                 let source_text = source_text.as_ref();
-                let (discriminant, span, mut fields) = exprs
+                let normalized_enum = exprs
                     .normalized_enum()
                     .contextualize(#enum_error_msg)?;
-                dbg!(fields.dump());
+                let normalized_span = normalized_enum.span();
+                let mut normalized_iter = normalized_enum.into_iter();
+                let (discriminant, discriminant_span) = normalized_iter.next_text_or_err()?;
+
                 const OPTIONS: &'static [&'static str] = &[#options];
                 match discriminant.as_str() {
                     #(#deserialize_arms, )*
                     _ => Err(
                         ::easy_config::serialization::serialization_error::SerializationError::on_span(
                             ::easy_config::serialization::serialization_error::Kind::ExpectedDiscriminant(discriminant, OPTIONS),
-                            span
+                            normalized_span
                         )
                     ),
                 }

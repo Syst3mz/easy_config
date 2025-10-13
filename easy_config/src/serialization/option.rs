@@ -17,20 +17,19 @@ impl<T: EasyConfig> EasyConfig for Option<T> {
         Self: Sized
     {
         let source_text= source_text.as_ref();
-        let (discriminant, discriminant_span, fields) = expression_iterator
+        let normalized_enum = expression_iterator
             .normalized_enum()
             .contextualize("unable to deserialize enum")?;
+        let mut normalized_iter = normalized_enum.into_iter();
+        let (discriminant, discriminant_span) = normalized_iter.next_text_or_err()?;
 
         if discriminant == "None" {
             return Ok(None);
         }
 
         if discriminant == "Some" {
-            // fields is Expression::list([ value ])
-            let mut fields_iter = fields.into_iter();
-            let inner = fields_iter.next_or_err()?.minimized();
-
-            return Ok(Some(T::deserialize(&mut inner.into_iter(), source_text)?));
+            let mut fields_iter = normalized_iter.next_or_err()?.into_iter();
+            return Ok(Some(T::deserialize(&mut fields_iter, source_text)?));
         }
 
         Err(SerializationError::on_span(Kind::ExpectedDiscriminant(discriminant, &["None", "Some"]), discriminant_span))
