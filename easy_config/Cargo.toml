@@ -18,4 +18,5 @@ anyhow = "*"
 
 
 [features]
+default = ["derive"]
 derive = ["dep:easy_config_derive"]
