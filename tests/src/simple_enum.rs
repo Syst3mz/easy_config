@@ -12,6 +12,7 @@ mod tests {
     use easy_config::expression::Expression;
     use easy_config::parser::Parser;
     use crate::simple_enum::EnumNoArgs;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn serialize() {
@@ -26,7 +27,6 @@ mod tests {
         let exprs = EnumNoArgs::One.serialize();
         let text = exprs.uncomented_dump();
         let parsed = Parser::new(&text).parse().unwrap().into_iter().next().unwrap();
-        println!("{}", text);
         let deserialized = EnumNoArgs::deserialize(&mut parsed.into_iter(), text).expect("should deserialize");
         assert_eq!(deserialized, EnumNoArgs::One)
     }

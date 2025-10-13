@@ -20,24 +20,27 @@ mod tests {
     use easy_config::expression::Expression;
     use easy_config::parser::Parser;
     use easy_config::serialization::EasyConfig;
+    use pretty_assertions::assert_eq;
 
     use super::*;
 
     #[test]
     fn serialize() {
 
-        assert_eq!(testing().serialize(), Expression::list(vec![
+        assert_eq!(testing().serialize().pretty(), Expression::list(vec![
             Expression::presence("NamedFields"),
-            Expression::binding("x", Expression::list(vec![
-                Expression::presence("hello"),
-                Expression::presence("world"),
-            ])),
-            Expression::binding("z", Expression::list(vec![
-                Expression::presence(1),
-                Expression::presence(2),
-                Expression::presence(3)
-            ])).with_comment("My favorite numbers in order."),
-        ]))
+            Expression::list(vec![
+                Expression::binding("x", Expression::list(vec![
+                    Expression::presence("hello"),
+                    Expression::presence("world"),
+                ])),
+                Expression::binding("z", Expression::list(vec![
+                    Expression::presence(1),
+                    Expression::presence(2),
+                    Expression::presence(3)
+                ])).with_comment("My favorite numbers in order.")
+            ]),
+        ]).pretty())
     }
 
     #[test]
@@ -45,7 +48,6 @@ mod tests {
         let exprs = testing().serialize();
         let text = exprs.uncomented_dump();
         let parsed = Parser::new(&text).parse().unwrap().into_iter().next().unwrap();
-        println!("{}", text);
         let deserialized = NamedFields::deserialize(&mut parsed.into_iter(), text).expect("should deserialize");
         assert_eq!(deserialized, testing());
     }

@@ -1,3 +1,3 @@
 pub trait Describe {
-    fn describe(&self) -> String;
+    fn describe(&self, source_text: impl AsRef<str>) -> String;
 }

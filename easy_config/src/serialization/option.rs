@@ -1,18 +1,14 @@
 use crate::config_error::Contextualize;
-use crate::expression::{Atom, Expression, ExpressionData};
+use crate::expression::Expression;
 use crate::expression_iterator::ExpressionIterator;
 use crate::serialization::EasyConfig;
 use crate::serialization::serialization_error::{Kind, SerializationError};
-use crate::serialization::serialization_error::Kind::ExpectedList;
 
 impl<T: EasyConfig> EasyConfig for Option<T> {
     fn serialize(&self) -> Expression {
         match self {
-            None => Expression::presence("None".to_string()),
-            Some(t) => Expression::list(vec![
-                Expression::presence("Some"),
-                Expression::list(vec![t.serialize().minimized()]),
-            ]),
+            None => Expression::presence("None"),
+            Some(s) => Expression::list(vec![Expression::presence("Some"), Expression::list(vec![s.serialize()])])
         }
     }
 
@@ -20,71 +16,76 @@ impl<T: EasyConfig> EasyConfig for Option<T> {
     where
         Self: Sized
     {
-        let source_text = source_text.as_ref();
-        let name = expression_iterator.next_or_err(source_text).contextualize("Expected the start of an Option, but ran into the end of input instead.")?;
-        let name_span = name.span();
+        let source_text= source_text.as_ref();
+        let normalized_enum = expression_iterator
+            .normalized_enum()
+            .contextualize("unable to deserialize enum")?;
+        let mut normalized_iter = normalized_enum.into_iter();
+        let (discriminant, discriminant_span) = normalized_iter.next_text_or_err()?;
 
-        let ExpressionData::Presence(name, _) = name.data else {
-            return Err(SerializationError::on_span(Kind::ExpectedPresence(name), name_span, source_text))
-        };
-
-        let Atom::Text(name) = name else {
-            return Err(SerializationError::on_span(Kind::ExpectedText(name.to_string()), name_span, source_text))
-        };
-
-        if name.to_lowercase() == "none" {
-            return Ok(None)
+        if discriminant == "None" {
+            return Ok(None);
         }
 
-        if name.to_lowercase() != "some" {
-            return Err(SerializationError::on_span(
-                Kind::ExpectedDiscriminant(name, &["Some", "None"]),
-                name_span,
-                source_text
-            ));
+        if discriminant == "Some" {
+            let mut fields_iter = normalized_iter.next_or_err()?.into_iter();
+            return Ok(Some(T::deserialize(&mut fields_iter, source_text)?));
         }
 
-        let args = expression_iterator.next_or_err(source_text)
-            .contextualize("Expected an enum value, but ran into the end of input instead.")?;
-        let args_span = args.span();
-        if !args.is_list() {
-            return Err(SerializationError::on_span(ExpectedList(args), args_span, source_text));
-        }
-
-        Ok(Some(T::deserialize(&mut args.into_iter(), source_text)?))
+        Err(SerializationError::on_span(Kind::ExpectedDiscriminant(discriminant, &["None", "Some"]), discriminant_span))
     }
 }
 
+
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::serialization::{EasyConfig, Expression};
+    use crate::serialization::serialization_error::Kind;
 
-    #[test]
-    fn serialize_some() {
-        let target = Some(1);
-        assert_eq!(target.serialize(), Expression::list(
-            vec![
-                Expression::presence("Some"),
-                Expression::list(vec![Expression::presence(1)]),
-            ],
-        ));
-    }
-    #[test]
-    fn deserialize_some() {
-        let expected = Some(1);
-        let got = Option::deserialize(&mut expected.serialize().into_iter(), "Some (1)").unwrap();
-        assert_eq!(got, expected);
-    }
     #[test]
     fn serialize_none() {
-        let target: Option<String> = None;
-        assert_eq!(target.serialize(), Expression::presence("None"));
+        let x: Option<i32> = None;
+        let expr = x.serialize();
+        assert_eq!(expr, Expression::presence("None"));
+
+        // Round-trip through deserialize
+        let got = <Option<i32>>::deserialize(&mut expr.clone().into_iter(), "").unwrap();
+        assert_eq!(got, None);
     }
 
     #[test]
-    fn deserialize_none() {
-        let expected: Option<i32> = None;
-        let got = Option::deserialize(&mut expected.serialize().into_iter(), "None").unwrap();
-        assert_eq!(got, expected);
+    fn serialize_some_primitive() {
+        let x: Option<i32> = Some(42);
+        let expr = x.serialize();
+        let source = x.serialize().dump();
+        assert_eq!(
+            expr,
+            Expression::list(vec![
+                Expression::presence("Some"),
+                Expression::list(vec![Expression::presence(42)])
+            ])
+        );
+
+        let got = <Option<i32>>::deserialize(&mut expr.clone().into_iter(), source).unwrap();
+        assert_eq!(got, Some(42));
+    }
+
+    #[test]
+    fn invalid_discriminant() {
+        // Something like (Maybe (123)) should fail
+        let expr = Expression::list(vec![
+            Expression::presence("Maybe"),
+            Expression::list(vec![Expression::presence(123)])
+        ]);
+
+        let err = <Option<i32>>::deserialize(&mut expr.into_iter(), "").unwrap_err();
+        match err.kind() {
+            Kind::ExpectedDiscriminant(found, expected) => {
+                assert_eq!(found, "Maybe");
+                assert_eq!(expected, &["None", "Some"]);
+            }
+            _ => panic!("wrong error kind: {:?}", err),
+        }
     }
 }

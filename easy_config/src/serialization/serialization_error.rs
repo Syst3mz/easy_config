@@ -34,29 +34,29 @@ pub enum Kind {
     ReachedEoi
 }
 
-impl From<std::io::Error> for SerializationError {
+impl From<std::io::Error> for Kind {
     fn from(value: std::io::Error) -> Self {
-        SerializationError::FirstLevelError(Kind::FileError(value), String::new())
+        Kind::FileError(value)
     }
 }
-impl From<ParseIntError> for SerializationError {
+impl From<ParseIntError> for Kind {
     fn from(value: ParseIntError) -> Self {
-        SerializationError::FirstLevelError(Kind::ParseIntError(value), String::new())
+        Kind::ParseIntError(value)
     }
 }
-impl From<ParseCharError> for SerializationError {
+impl From<ParseCharError> for Kind {
     fn from(value: ParseCharError) -> Self {
-        SerializationError::FirstLevelError(Kind::ParseCharError(value), String::new())
+        Kind::ParseCharError(value)
     }
 }
-impl From<ParseFloatError> for SerializationError {
+impl From<ParseFloatError> for Kind {
     fn from(value: ParseFloatError) -> Self {
-        SerializationError::FirstLevelError(Kind::ParseFloatError(value), String::new())
+        Kind::ParseFloatError(value)
     }
 }
-impl From<ParseBoolError> for SerializationError {
+impl From<ParseBoolError> for Kind {
     fn from(value: ParseBoolError) -> Self {
-        SerializationError::FirstLevelError(Kind::ParseBoolError(value), String::new())
+        Kind::ParseBoolError(value)
     }
 }
 
@@ -68,9 +68,10 @@ fn expected_from_options_text(options: &[impl AsRef<str>]) -> String {
     }
 }
 impl Describe for Kind {
-    fn describe(&self) -> String {
+    fn describe(&self, source_text: impl AsRef<str>) -> String {
+        let source_text = source_text.as_ref();
         match self {
-            Kind::ParserErrors(errors) => format!("Unable to parse expression.\n{}", errors.iter().map(|x| x.to_string()).join("\n")),
+            Kind::ParserErrors(errors) => format!("Unable to parse expression.\n{}", errors.iter().map(|x| x.clone().to_error_string(source_text)).join("\n")),
             Kind::FileError(e) => format!("Unable to open file:\n{}", e),
             Kind::UnableToLocateBindingName(n) => format!("The binding {} is mandatory, but not present.", n),
             Kind::WrongCardinality { got, want } => format!("Wrong cardinality. Expected to have {} elements, but got {} elements", want, got),
@@ -92,9 +93,7 @@ impl Describe for Kind {
 }
 
 impl SerializationError {
-    pub fn end_of_input(source_text: impl AsRef<str>) -> SerializationError {
-        let source_text = source_text.as_ref();
-        let span = LexicalSpan::new(source_text.len() - 1, source_text.len());
-        SerializationError::on_span(Kind::ReachedEoi, span, source_text)
+    pub fn end_of_input() -> SerializationError {
+        SerializationError::on_span(Kind::ReachedEoi, LexicalSpan::zeros())
     }
 }

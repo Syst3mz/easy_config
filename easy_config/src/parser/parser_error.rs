@@ -24,7 +24,7 @@ fn unexpected_text<G: ToString + ?Sized, E: ToString>(got: &G, expected: &[E]) -
     format!("Unexpected token '{}'. {}.", got.to_string(), expected)
 }
 impl Describe for Kind {
-    fn describe(&self) -> String {
+    fn describe(&self, _: impl AsRef<str>) -> String {
         match self {
             Kind::UnexpectedToken(token, expected) => unexpected_text(
                 token.lexeme(), expected
@@ -38,5 +38,5 @@ impl Describe for Kind {
 pub fn end_of_input(source_text: impl AsRef<str>) -> ParserError {
     let source_text = source_text.as_ref();
     let span = LexicalSpan::new(source_text.len() - 1, source_text.len());
-    ParserError::on_span(Kind::ReachedEoi, span, source_text)
+    ParserError::on_span(Kind::ReachedEoi, span)
 }

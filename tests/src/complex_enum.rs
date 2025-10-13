@@ -32,7 +32,7 @@ mod tests {
             Expression::presence("Named"),
             Expression::list(vec![
                 Expression::binding("x", Expression::presence(1)),
-                Expression::binding("y", Expression::presence(2))
+                Expression::binding("y", Expression::presence(2)),
             ])
         ]))
     }
@@ -50,22 +50,23 @@ mod tests {
 
     #[test]
     fn unit_deserialize() {
-        let text = "(Unit)";
-        let result = Complex::deserialize(&mut Parser::new(text).parse().unwrap().into_iter(), text).unwrap();
+        let text = Complex::Unit.serialize().dump();
+        let result = Complex::deserialize(&mut Parser::new(&text).parse().unwrap().into_iter(), text).unwrap();
         assert_eq!(result, Complex::Unit);
     }
 
     #[test]
     fn named_deserialize() {
-        let text = "(Named (x=1 y=2))";
-        let result = Complex::deserialize(&mut Parser::new(text).parse().unwrap().into_iter(), text).unwrap();
+        let text = Complex::Named { x: 1, y: 2 }.serialize().dump();
+        let parsed = Parser::new(&text).parse().unwrap();
+        let result = Complex::deserialize(&mut parsed.into_iter(), text).unwrap();
         assert_eq!(result, Complex::Named { x: 1, y: 2 });
     }
 
     #[test]
     fn unnamed_deserialize() {
-        let text = "(Unnamed (3 4))";
-        let result = Complex::deserialize(&mut Parser::new(text).parse().unwrap().into_iter(), text).unwrap();
+        let text = Complex::Unnamed(3, 4).serialize().dump();
+        let result = Complex::deserialize(&mut Parser::new(&text).parse().unwrap().into_iter(), text).unwrap();
         assert_eq!(result, Complex::Unnamed(3, 4));
     }
 }

@@ -9,7 +9,8 @@ use crate::parser::parser_error::{end_of_input, ParserError};
 pub mod parser_error;
 pub struct FinishedParser {
     expression: Expression,
-    errors: Vec<ParserError>
+    errors: Vec<ParserError>,
+    source_text: String,
 }
 
 impl From<Parser> for FinishedParser {
@@ -21,6 +22,7 @@ impl From<Parser> for FinishedParser {
         Self {
             expression: Expression::list(parser.expressions).with_span(span),
             errors: parser.errors,
+            source_text: parser.source
         }
     }
 }
@@ -31,8 +33,8 @@ impl FinishedParser {
 
     pub fn unwrap(self) -> Expression {
         if !self.errors.is_empty() {
-            let panic_text= self.errors.iter()
-                .map(|x| x.to_string())
+            let panic_text= self.errors.into_iter()
+                .map(|x| x.to_error_string(&self.source_text))
                 .join("\n");
             panic!("{}", panic_text);
         }
@@ -49,19 +51,6 @@ pub struct Parser {
     source: String
 }
 
-/*
-enum -> TEXT list
-atom -> NUMBER
-      | TEXT
-
-presence -> atom
-bind -> TEXT "=" expression
-list -> "(" expression* ")"
-expression -> presence
-            | bind
-            | enum
-            | list
-*/
 type Tk = token::Kind;
 type Ek = parser_error::Kind;
 impl Parser {
@@ -118,7 +107,6 @@ impl Parser {
         ParserError::on_span(
             Ek::UnexpectedToken(offender, expected),
             span,
-            &self.source
         )
     }
     fn parse_atom(&mut self) -> Result<Token, ParserError> {
@@ -138,7 +126,7 @@ impl Parser {
     fn parse_binding(&mut self, identifier: Token) -> Result<Expression, ParserError> {
         if let Some(errant_index) = identifier.invalid_identifier_char_index() {
             let errant_index = identifier.span().start() + errant_index;
-            return Err(ParserError::on_span(Ek::InvalidIdentifier(identifier), LexicalSpan::new(errant_index, errant_index + 1), &self.source))
+            return Err(ParserError::on_span(Ek::InvalidIdentifier(identifier), LexicalSpan::new(errant_index, errant_index + 1)))
         }
 
         if let Err(token) = self.eat(Tk::Equals) {
