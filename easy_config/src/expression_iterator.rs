@@ -136,7 +136,7 @@ impl ExpressionIterator {
     }
 
 
-    fn normalized_enum_helper(&mut self) -> Result<(String, LexicalSpan, Expression), SerializationError> {
+    fn normalized_enum_helper(&mut self) -> Result<Expression, SerializationError> {
         let discriminant_expr = self.next_or_err()?;
         let discriminant_span = discriminant_expr.span();
 
@@ -159,20 +159,12 @@ impl ExpressionIterator {
 
         // If there’s no payload, return empty composite
         let Some(peeked) = self.peek() else {
-            return Ok((
-                discriminant.clone(),
-                discriminant_span,
-                Expression::new(List(vec![], discriminant_span), discriminant_comment),
-            ));
+            return Ok(Self::normalize_composite(discriminant, vec![], discriminant_span, discriminant_comment));
         };
 
         // If the next expr isn’t a list, treat it as no payload
         if !peeked.is_list() {
-            return Ok((
-                discriminant.clone(),
-                discriminant_span,
-                Expression::new(List(vec![], discriminant_span), discriminant_comment),
-            ));
+            return Ok(Self::normalize_composite(discriminant, vec![], discriminant_span, discriminant_comment));
         }
 
         // Otherwise consume the list and treat its contents as the payload
@@ -181,21 +173,18 @@ impl ExpressionIterator {
             unreachable!()
         };
 
-        Ok((
-            discriminant.clone(),
-            discriminant_span,
-            Expression::new(List(list, list_span), next.comment),
-        ))
+        Ok(Self::normalize_composite(discriminant, list, discriminant_span.combine(list_span), discriminant_comment))
     }
 
-    pub fn normalized_enum(&mut self) -> Result<(String, LexicalSpan, Expression), SerializationError> {
+    pub fn normalized_enum(&mut self) -> Result<Expression, SerializationError> {
         let Some(expr) = self.peek() else {
             return Err(SerializationError::end_of_input())
                 .contextualize("Failed to read enum.")
         };
 
         if expr.is_list() {
-            let mut expr = self.next_or_err()?.into_iter();
+            let expr = self.next_or_err()?;
+            let expr = &mut expr.into_iter();
             expr.normalized_enum_helper()
         } else {
             self.normalized_enum_helper()
@@ -205,6 +194,7 @@ impl ExpressionIterator {
 
     pub fn binding_map(&mut self) -> Result<BindingMap, SerializationError> {
         let next = self.next_or_err()?;
+        dbg!(next.dump());
         let List(list, span) = next.data else {
             let span = next.span();
             return Err(SerializationError::on_span(ExpectedList(next), span))
@@ -288,7 +278,7 @@ mod tests {
 
         let mut iter = input.into_iter();
 
-        let (disc, span, payload) = iter.normalized_enum().unwrap();
+        let expr = iter.normalized_enum().unwrap();
 
         assert_eq!(disc, "name");
         assert_eq!(span, LexicalSpan::zeros());
@@ -308,7 +298,7 @@ mod tests {
 
         let mut iter = input.into_iter();
 
-        let (disc, span, payload) = iter.normalized_enum().unwrap();
+        let expr = iter.normalized_enum().unwrap();
 
         assert_eq!(disc, "name");
         assert_eq!(span, LexicalSpan::zeros());

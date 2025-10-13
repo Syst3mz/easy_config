@@ -102,6 +102,7 @@ fn generate_config_for_enum(input: &DeriveInput, data: &DataEnum) -> TokenStream
                 let (discriminant, span, mut fields) = exprs
                     .normalized_enum()
                     .contextualize(#enum_error_msg)?;
+                dbg!(fields.dump());
                 const OPTIONS: &'static [&'static str] = &[#options];
                 match discriminant.as_str() {
                     #(#deserialize_arms, )*
