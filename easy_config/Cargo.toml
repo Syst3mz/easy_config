@@ -13,8 +13,8 @@ keywords = ["config"]
 
 [dependencies]
 easy_config_derive = {path = "../derive", optional = true, version = "0.3.3"}
-itertools = "*"
-anyhow = "*"
+itertools = "^0.14.0"
+anyhow = "^1.0.100"
 
 
 [features]
