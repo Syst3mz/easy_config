@@ -5,3 +5,4 @@ mod complex_enum;
 mod use_case;
 mod single_field_enum;
 mod enum_in_a_vec;
+mod human_use;

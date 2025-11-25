@@ -51,6 +51,7 @@ fn generate_config_for_struct(input: &DeriveInput, data: &DataStruct) -> TokenSt
 
     quote! {
         impl #impl_generics ::easy_config::serialization::EasyConfig for #struct_name #ty_generics #where_clause {
+            const IS_STRUCT: bool = true;
             fn serialize(&self) -> ::easy_config::expression::Expression {
                 #imports
                 #serialize_body
@@ -90,6 +91,7 @@ fn generate_config_for_enum(input: &DeriveInput, data: &DataEnum) -> TokenStream
 
     quote! {
         impl #impl_generics ::easy_config::serialization::EasyConfig for #enum_name #ty_generics #where_clause {
+            const IS_ENUM: bool = true;
             fn serialize(&self) -> ::easy_config::expression::Expression {
                 match self {
                     #(#serialize_arms, )*
