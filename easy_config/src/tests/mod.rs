@@ -7,6 +7,7 @@ mod simple_test;
 mod composite_tuple;
 mod vec_of_structs;
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq)]
 struct EzStruct {
     name: String,
