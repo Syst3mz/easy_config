@@ -1,11 +1,13 @@
 use easy_config_derive::EasyConfig;
 
+#[allow(dead_code)]
 #[derive(Debug, EasyConfig, PartialEq)]
 enum TestEnum {
     First(String),
     Second(String),
 }
 
+#[allow(dead_code)]
 #[derive(Debug, EasyConfig, PartialEq)]
 struct TestStruct {
     contents: Vec<TestEnum>

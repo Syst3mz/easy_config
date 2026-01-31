@@ -10,13 +10,13 @@ use std::collections::HashMap;
 fn serialize_array_like<'a, T: EasyConfig>(iter: impl Iterator<Item=&'a T>) -> Expression {
     Expression::list(iter.map(|e| e.serialize()).collect())
 }
-fn deserialize_array_like<T: EasyConfig>(expression_iterator: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<(Vec<T>, LexicalSpan), SerializationError> {
+
+fn deserialize_explicit_array_like<T: EasyConfig>(expression_iterator: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<(Vec<T>, LexicalSpan), SerializationError> {
     let source_text = source_text.as_ref();
     let next = expression_iterator.next_or_err()?;
-
     let List(exprs, span) = next.data else {
         let span = next.span();
-        return Err(SerializationError::on_span(ExpectedList(next), span));
+        return Err(SerializationError::on_span(ExpectedList(next), span))
     };
 
     if exprs.is_empty() {
@@ -43,6 +43,26 @@ fn deserialize_array_like<T: EasyConfig>(expression_iterator: &mut ExpressionIte
     }
 
     Ok((ret, span))
+}
+fn deserialize_array_like<T: EasyConfig>(expression_iterator: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<(Vec<T>, LexicalSpan), SerializationError> {
+    let source_text = source_text.as_ref();
+
+    // Check if we're looking at a single list expression
+    if let Some(peeked) = expression_iterator.peek() && peeked.is_list() {
+        return deserialize_explicit_array_like(expression_iterator, source_text)
+    }
+
+    let mut ret = vec![];
+    let mut combined_span = expression_iterator.span();
+
+    while !expression_iterator.finished() {
+        ret.push(T::deserialize(expression_iterator, source_text)?);
+        if let Some(span) = expression_iterator.span() {
+            combined_span = Some(combined_span.map_or(span, |s| s.combine(span)));
+        }
+    }
+
+    Ok((ret, combined_span.unwrap_or(LexicalSpan::new(0, 0))))
 }
 
 impl<T: EasyConfig> EasyConfig for Vec<T> {
@@ -80,6 +100,31 @@ impl<T: EasyConfig, const N: usize> EasyConfig for [T; N] {
         deserialized_vec.try_into().map_err(|_| err)
     }
 }
+
+fn deserialize_explicit_hash_map<T: EasyConfig>(expression_iterator: &mut ExpressionIterator, source_text: impl AsRef<str>) -> Result<HashMap<String, T>, SerializationError> {
+    let source_text = source_text.as_ref();
+    let next = expression_iterator.next_or_err()?;
+
+    let List(exprs, _) = next.data else {
+        let span = next.span();
+        return Err(SerializationError::on_span(ExpectedList(next), span));
+    };
+
+    let mut ret = HashMap::new();
+    for expr in exprs {
+        let ExpressionData::BindingExpr(binding) = expr.data else {
+            let span = expr.span();
+            return Err(SerializationError::on_span(ExpectedBinding(expr), span));
+        };
+
+        // Wrap the value in a list so the iterator returns it as a single item
+        let wrapper = Expression::list(vec![*binding.value]);
+        ret.insert(binding.name, T::deserialize(&mut wrapper.into_iter(), source_text)?);
+    }
+
+    Ok(ret)
+}
+
 impl<T: EasyConfig> EasyConfig for HashMap<String, T> {
     fn serialize(&self) -> Expression {
         Expression::list(self.iter().map(|(k, v)| Expression::binding(k, v.serialize())).collect())
@@ -90,15 +135,14 @@ impl<T: EasyConfig> EasyConfig for HashMap<String, T> {
         Self: Sized
     {
         let source_text = source_text.as_ref();
-        let next = expression_iterator.next_or_err()?;
-
-        let List(exprs, _) = next.data else {
-            let span = next.span();
-            return Err(SerializationError::on_span(ExpectedList(next), span));
-        };
+        if let Some(peeked) = expression_iterator.peek() && peeked.is_list() {
+            return deserialize_explicit_hash_map(expression_iterator, source_text)
+        }
 
         let mut ret = HashMap::new();
-        for expr in exprs {
+
+        while !expression_iterator.finished() {
+            let expr = expression_iterator.next_or_err()?;
             let ExpressionData::BindingExpr(binding) = expr.data else {
                 let span = expr.span();
                 return Err(SerializationError::on_span(ExpectedBinding(expr), span));

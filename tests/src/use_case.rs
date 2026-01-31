@@ -1,5 +1,5 @@
 use easy_config_derive::EasyConfig;
-
+#[allow(dead_code)]
 #[derive(EasyConfig, PartialEq, Debug, Eq)]
 struct ServerTest {
     address: String,

@@ -17,7 +17,7 @@ fn build_error_area(span: LexicalSpan, source_text: impl AsRef<str>) -> String {
     let mut offset = " ".repeat(index_of_offender + left_dots.len());
     
     let span = LexicalSpan::new(lowest_bound, highest_bound);
-    let window = span.slice(source_text);
+    let window = span.slice(source_text).replace('\n', " ");
     if window.is_empty() {
         return String::new()
     }
