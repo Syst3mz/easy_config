@@ -300,6 +300,18 @@ mod tests {
          Parser::new("(a b").parse().unwrap();
     }
 
+    #[test]
+    fn parse_sole_struct() {
+        let text = r"a (b)";
+        let p = Parser::new(text).parse().unwrap();
+        assert_eq!(p, Expression::list(vec![
+            Expression::presence("a").with_span(LexicalSpan::new(0, 1)),
+            Expression::list(vec![
+                Expression::presence("b").with_span(LexicalSpan::new(3, 4)),
+            ]).with_span(LexicalSpan::new(2, 5)),
+        ]).with_span(LexicalSpan::new(0, 5)));
+    }
+
 
     #[test]
     fn parse_the_thing() {

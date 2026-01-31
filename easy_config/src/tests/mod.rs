@@ -41,6 +41,7 @@ impl EasyConfig for EzStruct {
     }
 }
 
+#[allow(dead_code)]
 fn ez_struct() -> EzStruct {
     EzStruct {
         name: "Momo".to_string(),

@@ -198,7 +198,7 @@ impl Expression {
     /// Convert this Expression to the smallest form which holds it. I.E. `Collection`s with 1 element
     /// are replaced with that element, removing the collection.
     pub fn minimized(mut self) -> Self {
-        if let List(ref mut c, _) = &mut self.data {
+        if let List(c, _) = &mut self.data {
             if c.len() != 1 {
                 return self;
             }

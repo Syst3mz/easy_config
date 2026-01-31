@@ -1,5 +1,6 @@
 use easy_config_derive::EasyConfig;
 
+#[allow(dead_code)]
 #[derive(Debug, EasyConfig, PartialEq)]
 enum TestEnum {
     First(String),

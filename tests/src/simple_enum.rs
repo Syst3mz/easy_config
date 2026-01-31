@@ -1,5 +1,5 @@
 use easy_config_derive::EasyConfig;
-
+#[allow(dead_code)]
 #[derive(Debug, Copy, Clone, EasyConfig, PartialEq)]
 enum EnumNoArgs {
     One,

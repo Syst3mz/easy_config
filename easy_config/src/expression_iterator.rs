@@ -111,7 +111,7 @@ impl ExpressionIterator {
             }
             List(l, s) => {
                 // Case: already looks like (Demo (...))
-                if let Some(Expression { data: Presence(Atom::Text(ref name), ..), .. }) = l.first() {
+                if let Some(Expression { data: Presence(Atom::Text(name), ..), .. }) = l.first() {
                     if name == struct_name {
                         return Ok(Expression::new(List(l, s), comment));
                     }

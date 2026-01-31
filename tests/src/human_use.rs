@@ -1,6 +1,9 @@
 use easy_config_derive::EasyConfig;
 
+#[allow(dead_code)]
 type ItemId = String;
+
+#[allow(dead_code)]
 #[derive(Debug, Clone, EasyConfig, PartialEq)]
 pub struct ItemDefinition {
     id: ItemId,
@@ -40,11 +43,11 @@ mod tests {
     #[test]
     fn deserialize_vec() {
         let text = r"
-            (ItemDefinition (
+            ItemDefinition (
                 id = WHITE_MANA
                 name = (White Mana)
                 tags = ()
-            ))
+            )
         ";
 
         let parsed = Parser::new(text).parse().unwrap();

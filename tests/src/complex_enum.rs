@@ -1,5 +1,5 @@
 use easy_config_derive::EasyConfig;
-
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, EasyConfig, PartialEq)]
 enum Complex {
     Unit,
