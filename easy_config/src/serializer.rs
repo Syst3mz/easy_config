@@ -116,17 +116,16 @@ impl<'a, W: io::Write> serde::Serializer for &'a mut Serializer<W> {
     type Ok = ();
     type Error = TextualError;
 
-    type SerializeSeq = SeqSerializer<'a>;
-    type SerializeTuple = SeqSerializer<'a>;
-    type SerializeTupleStruct = SeqSerializer<'a>;
-    type SerializeTupleVariant = SeqSerializer<'a>;
-    type SerializeMap = MapSerializer<'a>;
-    type SerializeStruct = MapSerializer<'a>;
-    type SerializeStructVariant = MapSerializer<'a>;
+    type SerializeSeq = SeqSerializer<'a, W>;
+    type SerializeTuple = SeqSerializer<'a, W>;
+    type SerializeTupleStruct = SeqSerializer<'a, W>;
+    type SerializeTupleVariant = SeqSerializer<'a, W>;
+    type SerializeMap = MapSerializer<'a, W>;
+    type SerializeStruct = MapSerializer<'a, W>;
+    type SerializeStructVariant = MapSerializer<'a, W>;
 
     fn serialize_bool(self, v: bool) -> Result<(), Self::Error> {
-        self.push(if v { "true" } else { "false" })?;
-        Ok(())
+        Ok(self.push(if v { "true" } else { "false" })?)
     }
 
     fn serialize_i8(self, v: i8) -> Result<(), Self::Error> {
@@ -163,7 +162,7 @@ impl<'a, W: io::Write> serde::Serializer for &'a mut Serializer<W> {
         Ok(self.push(&escape(&v.to_string()))?)
     }
     fn serialize_str(self, v: &str) -> Result<(), Self::Error> {
-        Ok(self.push(&escape(&v.to_string()))?)
+        Ok(self.push(&escape(v))?)
     }
     fn serialize_bytes(self, _v: &[u8]) -> Result<(), Self::Error> {
         unimplemented!()
@@ -174,15 +173,15 @@ impl<'a, W: io::Write> serde::Serializer for &'a mut Serializer<W> {
     }
 
     fn serialize_some<T: serde::Serialize + ?Sized>(self, value: &T) -> Result<(), Self::Error> {
-        self.push("Some(")?;
+        self.push("Some")?;
+        self.open_paren()?;
         value.serialize(&mut *self)?;
-        self.output.push(')');
+        self.close_paren()?;
         Ok(())
     }
 
     fn serialize_unit(self) -> Result<(), Self::Error> {
-        self.push("()");
-        Ok(())
+        Ok(self.push("()")?)
     }
 
     fn serialize_unit_struct(self, name: &'static str) -> Result<(), Self::Error> {
@@ -204,15 +203,16 @@ impl<'a, W: io::Write> serde::Serializer for &'a mut Serializer<W> {
     fn serialize_newtype_variant<T: serde::Serialize + ?Sized>(
         self, _name: &'static str, _idx: u32, variant: &'static str, value: &T
     ) -> Result<(), Self::Error> {
-        self.push(&format!("{variant}("))?;
+        self.push(variant)?;
+        self.open_paren()?;
         value.serialize(&mut *self)?;
-        self.output.push(')');
+        self.close_paren()?;
         Ok(())
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        self.output.push_str(if self.output.is_empty() { "(" } else { " (" });
-        Ok(SeqSerializer { ser: self, first: true })
+        self.open_paren()?;
+        Ok(SeqSerializer { ser: self })
     }
 
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
@@ -228,13 +228,13 @@ impl<'a, W: io::Write> serde::Serializer for &'a mut Serializer<W> {
     fn serialize_tuple_variant(
         self, _name: &'static str, _idx: u32, variant: &'static str, len: usize
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        self.push(&format!("{variant}"));
+        self.push(variant)?;
         self.serialize_seq(Some(len))
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        self.output.push_str(if self.output.is_empty() { "(" } else { " (" });
-        Ok(MapSerializer { ser: self, first: true })
+        self.open_paren()?;
+        Ok(MapSerializer { ser: self })
     }
 
     fn serialize_struct(
@@ -246,128 +246,113 @@ impl<'a, W: io::Write> serde::Serializer for &'a mut Serializer<W> {
     fn serialize_struct_variant(
         self, _name: &'static str, _idx: u32, variant: &'static str, len: usize
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        self.push(variant);
+        self.push(variant)?;
         self.serialize_map(Some(len))
     }
 }
 
 // --- seq/tuple serializer ---
 
-pub struct SeqSerializer<'a> {
-    ser: &'a mut Serializer,
-    first: bool,
+pub struct SeqSerializer<'a, W: io::Write> {
+    ser: &'a mut Serializer<W>,
 }
 
-impl<'a> SeqSerializer<'a> {
+impl<'a, W: io::Write> SeqSerializer<'a, W> {
     fn serialize_element_inner<T: serde::Serialize + ?Sized>(
         &mut self, value: &T
     ) -> Result<(), TextualError> {
-        if !self.first {
-            // push will add spacing via the normal path
-        }
-        self.first = false;
         value.serialize(&mut *self.ser)
     }
 }
 
-impl<'a> SerializeSeq for SeqSerializer<'a> {
+impl<'a, W: io::Write> SerializeSeq for SeqSerializer<'a, W> {
     type Ok = ();
     type Error = TextualError;
     fn serialize_element<T: serde::Serialize + ?Sized>(&mut self, value: &T) -> Result<(), Self::Error> {
         self.serialize_element_inner(value)
     }
     fn end(self) -> Result<(), Self::Error> {
-        self.ser.output.push(')');
-        Ok(())
+        Ok(self.ser.close_paren()?)
     }
 }
 
-impl<'a> SerializeTuple for SeqSerializer<'a> {
+impl<'a, W: io::Write> SerializeTuple for SeqSerializer<'a, W> {
     type Ok = ();
     type Error = TextualError;
     fn serialize_element<T: serde::Serialize + ?Sized>(&mut self, value: &T) -> Result<(), Self::Error> {
         self.serialize_element_inner(value)
     }
     fn end(self) -> Result<(), Self::Error> {
-        self.ser.output.push(')');
-        Ok(())
+        Ok(self.ser.close_paren()?)
     }
 }
 
-impl<'a> SerializeTupleStruct for SeqSerializer<'a> {
+impl<'a, W: io::Write> SerializeTupleStruct for SeqSerializer<'a, W> {
     type Ok = ();
     type Error = TextualError;
     fn serialize_field<T: serde::Serialize + ?Sized>(&mut self, value: &T) -> Result<(), Self::Error> {
         self.serialize_element_inner(value)
     }
     fn end(self) -> Result<(), Self::Error> {
-        self.ser.output.push(')');
-        Ok(())
+        Ok(self.ser.close_paren()?)
     }
 }
 
-impl<'a> SerializeTupleVariant for SeqSerializer<'a> {
+impl<'a, W: io::Write> SerializeTupleVariant for SeqSerializer<'a, W> {
     type Ok = ();
     type Error = TextualError;
     fn serialize_field<T: serde::Serialize + ?Sized>(&mut self, value: &T) -> Result<(), Self::Error> {
         self.serialize_element_inner(value)
     }
     fn end(self) -> Result<(), Self::Error> {
-        self.ser.output.push(')');
-        Ok(())
+        Ok(self.ser.close_paren()?)
     }
 }
 
 // --- map/struct serializer ---
 
-pub struct MapSerializer<'a> {
-    ser: &'a mut Serializer,
-    first: bool,
+pub struct MapSerializer<'a, W: io::Write> {
+    ser: &'a mut Serializer<W>,
 }
 
-impl<'a> SerializeMap for MapSerializer<'a> {
+impl<'a, W: io::Write> SerializeMap for MapSerializer<'a, W> {
     type Ok = ();
     type Error = TextualError;
 
     fn serialize_key<T: serde::Serialize + ?Sized>(&mut self, key: &T) -> Result<(), Self::Error> {
-        self.first = false;
         key.serialize(&mut *self.ser)
     }
 
     fn serialize_value<T: serde::Serialize + ?Sized>(&mut self, value: &T) -> Result<(), Self::Error> {
-        self.ser.output.push('=');
+        write!(self.ser.output, "=")?;
         value.serialize(&mut *self.ser)
     }
 
     fn end(self) -> Result<(), Self::Error> {
-        self.ser.output.push(')');
-        Ok(())
+        Ok(self.ser.close_paren()?)
     }
 }
 
-impl<'a> SerializeStruct for MapSerializer<'a> {
+impl<'a, W: io::Write> SerializeStruct for MapSerializer<'a, W> {
     type Ok = ();
     type Error = TextualError;
 
     fn serialize_field<T: serde::Serialize + ?Sized>(
         &mut self, key: &'static str, value: &T
     ) -> Result<(), Self::Error> {
-        // spacing before each field
-        if !self.ser.output.ends_with('(') {
-            self.ser.output.push(' ');
-        }
-        self.ser.output.push_str(key);
-        self.ser.output.push('=');
+        self.ser.push(key)?;
+        write!(self.ser.output, "=")?;
+        // Suppress the leading space that push() would add before the value
+        self.ser.after_open = true;
         value.serialize(&mut *self.ser)
     }
 
     fn end(self) -> Result<(), Self::Error> {
-        self.ser.output.push(')');
-        Ok(())
+        Ok(self.ser.close_paren()?)
     }
 }
 
-impl<'a> SerializeStructVariant for MapSerializer<'a> {
+impl<'a, W: io::Write> SerializeStructVariant for MapSerializer<'a, W> {
     type Ok = ();
     type Error = TextualError;
 
@@ -378,8 +363,7 @@ impl<'a> SerializeStructVariant for MapSerializer<'a> {
     }
 
     fn end(self) -> Result<(), Self::Error> {
-        self.ser.output.push(')');
-        Ok(())
+        Ok(self.ser.close_paren()?)
     }
 }
 

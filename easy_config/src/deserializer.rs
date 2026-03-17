@@ -11,20 +11,24 @@ pub struct Deserializer<'de> {
 }
 
 impl<'de> Deserializer<'de> {
-    fn peek(&'_ mut self) -> Result<Token<'_>, TextualError> {
+    fn peek(&'_ mut self) -> Result<Token, TextualError> {
         self.tokens.peek().unwrap_or(Err(Error::ReachedEoi)).to_textual_error(self.source)
     }
-    fn check(&'_ mut self, expected: &'static [Tk]) -> Result<Token<'_>, TextualError> {
+    fn check(&'_ mut self, expected: &'static [Tk]) -> Result<Token, TextualError> {
         self.tokens.check(&expected).to_textual_error(self.source)
     }
 
-    fn expect(&mut self, expected: &'static [Tk]) -> Result<Token<'de>, TextualError> {
+    fn expect(&mut self, expected: &'static [Tk]) -> Result<Token, TextualError> {
         self.tokens.expect(expected).to_textual_error(self.source)
+    }
+
+    fn resolve(&self, token: impl AsRef<Token>) -> &str {
+        token.as_ref().resolve(self.source)
     }
 
     fn consume_name_if_present(&mut self, name: &str) -> Result<(), Error> {
         if let Ok(token) = self.expect(&[Tk::Text]) {
-            if name != token.lexeme {
+            if name != self.resolve(token) {
                 return Err(Error::unable_to_convert_token_to(token, name))
             }
         }
@@ -49,7 +53,7 @@ impl<'de> Deserializer<'de> {
 
     fn consume_string(&mut self) -> Result<String, TextualError> {
         if let Ok(token) = self.expect(&[Tk::Text]) {
-            return Ok(Self::unescape(token.lexeme.to_string()))
+            return Ok(Self::unescape(self.resolve(token)))
         }
 
         let _left_paren = self.expect(&[Tk::LeftParen])?;
@@ -92,7 +96,7 @@ macro_rules! deserialize_primitive {
         let has_paren = $self.check(&[Tk::LeftParen]).is_ok();
         if has_paren { $self.expect(&[Tk::LeftParen])?; }
         let token = $self.expect(&[Tk::Text])?;
-        let value = token.lexeme.parse::<$typ>()
+        let value = $self.resolve(token).parse::<$typ>()
             .map_err(|_| Error::unable_to_convert_token_to(token, stringify!($typ))
                 .to_textual_error($self.source))?;
         if has_paren { $self.expect(&[Tk::RightParen])?; }
@@ -199,7 +203,7 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
         V: Visitor<'de>
     {
         let token = self.expect(&[Tk::Text])?;
-        let kind = match token.lexeme.to_lowercase().as_ref() {
+        let kind = match self.resolve(token).to_lowercase().as_ref() {
             "true" => true,
             "false" => false,
             _ => return Err(
@@ -287,7 +291,7 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
         V: Visitor<'de>
     {
         let token = self.expect(&[Tk::Text])?;
-        let mut chars = token.lexeme.chars();
+        let mut chars = self.resolve(token).chars();
         let Some(c) = chars.next() else { unreachable!() };
         if chars.next().is_some() {
             return Err(Error::unable_to_convert_token_to(token, "char").to_textual_error(self.source));
@@ -329,7 +333,7 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
         V: Visitor<'de>
     {
         let discriminant = self.expect(&[Tk::Text])?;
-        match discriminant.lexeme{
+        match self.resolve(discriminant){
             "None" => return visitor.visit_none(),
             "Some" => {},
             _ => return Err(

@@ -12,11 +12,11 @@ impl<'source> Cursor<'source> {
             inner: Lexer::new(source).peekable(),
         }
     }
-    pub fn peek<'m>(&'m mut self) -> Option<Result<Token<'source>, Error>> {
+    pub fn peek(&mut self) -> Option<Result<Token, Error>> {
         self.inner.peek().map(|x| x.as_ref().map(|x| x.clone()).map_err(|x| x.clone()))
     }
 
-    pub fn check<'m>(&'m mut self, kinds: &'static [TokenKind]) -> Result<Token<'source>, Error> {
+    pub fn check(&mut self, kinds: &'static [TokenKind]) -> Result<Token, Error> {
         let peeked = self.peek().ok_or(Error::ReachedEoi)??;
 
         for kind in kinds {
@@ -28,7 +28,7 @@ impl<'source> Cursor<'source> {
         Err(Error::UnexpectedToken(peeked.kind, kinds, peeked.span))
     }
 
-    pub fn expect<'m>(&'m mut self, kinds: &'static [TokenKind]) -> Result<Token<'source>, Error> {
+    pub fn expect(&mut self, kinds: &'static [TokenKind]) -> Result<Token, Error> {
         let checked = self.check(kinds)?;
         self.inner.next();
         Ok(checked)
@@ -36,7 +36,7 @@ impl<'source> Cursor<'source> {
 }
 
 impl<'a> Iterator for Cursor<'a> {
-    type Item = Result<Token<'a>, Error>;
+    type Item = Result<Token, Error>;
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }

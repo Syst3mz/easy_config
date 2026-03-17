@@ -15,7 +15,7 @@ pub enum Error {
     UnexpectedToken(TokenKind, &'static [TokenKind], Span),
     ReachedEoi,
     Contextual(String, Box<Error>),
-    UnableToConvert(String, String, Span),
+    UnableToConvert(Token, String, Span),
 }
 
 fn expected_error_text(got: &TokenKind, expected: &[TokenKind]) -> String {
@@ -30,13 +30,14 @@ fn expected_error_text(got: &TokenKind, expected: &[TokenKind]) -> String {
 
 impl Error {
 
-    pub fn error_text(&self) -> String {
+    pub fn error_text(&self, source: impl AsRef<str>) -> String {
+        let source = source.as_ref();
         match self {
             Error::TokenizationError(_) => "Tokenization error".to_string(),
             Error::UnexpectedToken(got, expected, _) => expected_error_text(got, expected),
             Error::ReachedEoi => "Reached end of input while parsing".to_string(),
-            Error::Contextual(m, c) => format!("{m}\n{}", c.error_text()),
-            Error::UnableToConvert(from, to, _) => format!("Unable to convert {} to {}", from, to),
+            Error::Contextual(m, c) => format!("{m}\n{}", c.error_text(source)),
+            Error::UnableToConvert(from, to, _) => format!("Unable to convert {} to {}", from.resolve(source), to),
         }
     }
 
@@ -50,8 +51,8 @@ impl Error {
         }
     }
 
-    pub fn unable_to_convert_token_to(token: Token<'_>, to: impl AsRef<str>) -> Error {
-        Error::UnableToConvert(token.lexeme.to_string(), to.as_ref().to_string(), token.span)
+    pub fn unable_to_convert_token_to(token: Token, to: impl AsRef<str>) -> Error {
+        Error::UnableToConvert(token, to.as_ref().to_string(), token.span)
     }
 
     pub fn to_textual_error(self, source: &str) -> TextualError {
@@ -92,7 +93,7 @@ impl TextualError {
         let location = Location::from_span(error.span().unwrap_or(Span::new(source.len() - 1, source.len())), source);
 
         TextualError {
-            message: error.error_text(),
+            message: error.error_text(source),
             location: Some(location),
         }
     }

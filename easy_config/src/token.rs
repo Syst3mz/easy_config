@@ -21,13 +21,22 @@ pub enum TokenKind {
 }
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
-pub struct Token<'a> {
+pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
-    pub lexeme: &'a str,
 }
 
-impl<'a> Token<'a> {
+impl AsRef<Token> for Token {
+    fn as_ref(&self) -> &Token {
+        self
+    }
+}
+
+impl Token {
+    pub fn resolve<'a>(&self, source: &'a str) -> &'a str {
+        &source[self.span.start..self.span.end]
+    }
+
     pub fn locate(&self, source: impl AsRef<str>) -> Location {
         let mut line = 1;
         let mut column = 0;
@@ -48,7 +57,7 @@ impl<'a> Token<'a> {
 }
 
 pub struct Lexer<'a> {
-    inner: logos::Lexer<'a, TokenKind>
+    inner: logos::Lexer<'a, TokenKind>,
 }
 
 impl<'a> Lexer<'a> {
@@ -59,15 +68,14 @@ impl<'a> Lexer<'a> {
     }
 }
 
-impl <'a> Iterator for Lexer<'a> {
-    type Item = Result<Token<'a>, Error>;
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Result<Token, Error>;
     fn next(&mut self) -> Option<Self::Item> {
 
         let token = self.inner.next()?;
         Some(token.map(|kind| Token {
             kind,
             span: self.inner.span().into(),
-            lexeme: self.inner.slice(),
         }).map_err(|_| Error::TokenizationError(self.inner.span().into())))
     }
 }
@@ -83,7 +91,7 @@ mod tests {
     fn lex_lexemes(input: &str) -> Vec<&str> {
         Lexer::new(input)
             .filter_map(|r| r.ok())
-            .map(|t| t.lexeme)
+            .map(|t| t.resolve(input))
             .collect()
     }
 
