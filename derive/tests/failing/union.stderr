@@ -1,0 +1,5 @@
+error: EasyConfig cannot be derived for unions
+ --> tests/failing/union.rs:4:7
+  |
+4 | union Foo {
+  |       ^^^

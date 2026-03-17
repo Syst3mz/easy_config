@@ -3,5 +3,6 @@ mod location;
 mod cursor;
 mod error;
 mod span;
-pub mod deserializer;
-pub mod serializer;
+pub mod schema;
+
+pub use easy_config_derive::EasyConfig;
