@@ -12,11 +12,7 @@ categories = ["config"]
 keywords = ["config"]
 
 [dependencies]
-easy_config_derive = {path = "../derive", optional = true, version = "0.3.2"}
 itertools = "^0.14"
 anyhow = "^1"
-
-
-[features]
-default = ["derive"]
-derive = ["dep:easy_config_derive"]
+logos = "0.16.1"
+serde = { version = "1.0.228", features = ["derive"] }

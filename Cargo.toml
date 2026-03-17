@@ -1,5 +1,5 @@
 [workspace]
-members = ["easy_config", "derive", "tests"]
+members = ["easy_config"]
 resolver = "2"
 
-default-members = ["easy_config", "derive"]
+default-members = ["easy_config"]
