@@ -5,7 +5,33 @@ type Static<T> = &'static T;
 pub trait HasSchema {
     const SCHEMA: Schema;
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NamedField {
+    pub name: Static<str>,
+    pub schema: Schema,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fields {
+    Unit,
+    NewType(Static<Schema>),
+    Tuple(Static<[Schema]>),
+    Named(Static<[NamedField]>),
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NamedBagOfFields {
+    pub name: Static<str>,
+    pub fields: Fields,
+}
 
+pub type StructSchema = NamedBagOfFields;
+pub type Variant = NamedBagOfFields;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EnumSchema {
+    pub name: Static<str>,
+    pub variants: Static<[Variant]>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Schema {
     Bool,
     I8, I16, I32, I64,
@@ -16,17 +42,11 @@ pub enum Schema {
     ByteArray,
     Option(Static<Schema>),
     Unit,
-    UnitStruct(Static<str>),
-    UnitVariant(Static<str>),
-    NewTypeStruct(Static<str>, Static<Schema>),
-    NewTypeVariant(Static<str>, Static<Schema>),
     Sequence(Static<Schema>),
     Tuple(Static<[Schema]>),
-    TupleStruct(Static<str>, Static<[Schema]>),
-    TupleVariant(Static<str>, Static<[Schema]>),
     Map(Static<Schema>, Static<Schema>),
-    Struct(Static<str>, Static<[(Static<str>, Schema)]>),
-    StructVariant(Static<str>, Static<[(Static<str>, Schema)]>),
+    Struct(Static<StructSchema>),
+    Enum(Static<EnumSchema>),
 }
 
 macro_rules! parameterless_schema {

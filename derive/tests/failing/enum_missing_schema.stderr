@@ -1,0 +1,21 @@
+error[E0277]: the trait bound `NoSchema: HasSchema` is not satisfied
+ --> tests/failing/enum_missing_schema.rs:7:9
+  |
+7 |     Bar(NoSchema),
+  |         ^^^^^^^^ unsatisfied trait bound
+  |
+help: the trait `HasSchema` is not implemented for `NoSchema`
+ --> tests/failing/enum_missing_schema.rs:3:1
+  |
+3 | struct NoSchema;
+  | ^^^^^^^^^^^^^^^
+  = help: the following other types implement trait `HasSchema`:
+            &T
+            &mut T
+            ()
+            (A, B)
+            (A, B, C)
+            (A, B, C, D)
+            (A, B, C, D, E)
+            (A, B, C, D, E, F)
+          and $N others
