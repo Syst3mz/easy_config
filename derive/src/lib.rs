@@ -202,3 +202,4 @@ pub fn derive_easy_config(input: TokenStream) -> TokenStream {
 
 #[cfg(test)]
 mod runner;
+mod attrs;

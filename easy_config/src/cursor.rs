@@ -33,6 +33,10 @@ impl<'source> Cursor<'source> {
         self.inner.next();
         Ok(checked)
     }
+
+    pub fn finished(&mut self) -> bool {
+        self.inner.peek().is_none()
+    }
 }
 
 impl<'a> Iterator for Cursor<'a> {

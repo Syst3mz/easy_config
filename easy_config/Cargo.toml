@@ -15,3 +15,4 @@ keywords = ["config"]
 itertools = "^0.14"
 logos = "0.16.1"
 easy_config_derive = {path = "../derive"}
+easy_shape = {path = "../../easy_shape/core"}

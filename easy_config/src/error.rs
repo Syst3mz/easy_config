@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use itertools::Itertools;
 use crate::location::Location;
@@ -16,9 +16,36 @@ pub enum Error {
     ReachedEoi,
     Contextual(String, Box<Error>),
     UnableToConvert(Token, String, Span),
+    FailedToParseValueAt {
+        expected: &'static str,
+        got: String,
+        span: Span,
+    },
+    WrongShape {
+        expected: &'static [&'static str],
+        got: &'static str,
+        span: Span,
+    },
+    WrongLength {
+        expected: usize,
+        got: usize,
+        span: Span,
+    },
+    UnknownField {
+        name: String,
+        span: Span,
+    },
+    MissingField {
+        name: &'static str,
+        span: Span,
+    },
+    UnknownVariant {
+        name: String,
+        span: Span,
+    },
 }
 
-fn expected_error_text(got: &TokenKind, expected: &[TokenKind]) -> String {
+fn expected_error_text<T: Debug>(got: &T, expected: &[T]) -> String {
     let expected = if expected.len() == 1 {
         format!("a {:?}", expected[0])
     } else {
@@ -38,6 +65,12 @@ impl Error {
             Error::ReachedEoi => "Reached end of input while parsing".to_string(),
             Error::Contextual(m, c) => format!("{m}\n{}", c.error_text(source)),
             Error::UnableToConvert(from, to, _) => format!("Unable to convert {} to {}", from.resolve(source), to),
+            Error::WrongShape { expected, got, span:_ } => expected_error_text(got, expected),
+            Error::FailedToParseValueAt { expected, got, span:_ } => format!("Unable to parse a {} from \"{}\"", expected, got),
+            Error::WrongLength { expected, got, .. } => format!("Expected {} elements but got {}", expected, got),
+            Error::UnknownField { name, .. } => format!("Unknown field \"{}\"", name),
+            Error::MissingField { name, .. } => format!("Missing required field \"{}\"", name),
+            Error::UnknownVariant { name, .. } => format!("Unknown variant \"{}\"", name),
         }
     }
 
@@ -48,6 +81,12 @@ impl Error {
             Error::ReachedEoi => None,
             Error::Contextual(_, e) => e.span(),
             Error::UnableToConvert(_, _, s) => Some(*s),
+            Error::FailedToParseValueAt { expected:_, got:_, span } => Some(*span),
+            Error::WrongShape { expected:_, got:_, span } => Some(*span),
+            Error::WrongLength { span, .. } => Some(*span),
+            Error::UnknownField { span, .. } => Some(*span),
+            Error::MissingField { span, .. } => Some(*span),
+            Error::UnknownVariant { span, .. } => Some(*span),
         }
     }
 
